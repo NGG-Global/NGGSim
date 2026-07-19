@@ -440,6 +440,34 @@ describe('SupabaseSimulationRepository sessions/reports', () => {
       .toMatchObject({ p_session_id: initial.id, p_access_token: accessToken, p_duration_seconds: 73 })
   })
 
+  it('forwards an idempotency key to the session-start RPC', async () => {
+    const accessToken = 'e'.repeat(64)
+    const fake = createFakeClient({
+      'rpc:start_public_simulation_session': [success({ accessToken, session: sessionRow() })],
+    })
+    const repository = new SupabaseSimulationRepository(fake.client, 'https://pilot.example')
+
+    await repository.createSession('a'.repeat(64), { fullName: 'בדיקה' }, 'attempt-abc123def456')
+    expect(fake.calls.find((call) => call.name === 'start_public_simulation_session')?.args)
+      .toMatchObject({
+        p_public_token: 'a'.repeat(64),
+        p_consent_version: 'pilot-v1',
+        p_idempotency_key: 'attempt-abc123def456',
+      })
+  })
+
+  it('sends a null idempotency key when the caller omits one', async () => {
+    const accessToken = 'f'.repeat(64)
+    const fake = createFakeClient({
+      'rpc:start_public_simulation_session': [success({ accessToken, session: sessionRow() })],
+    })
+    const repository = new SupabaseSimulationRepository(fake.client, 'https://pilot.example')
+
+    await repository.createSession('a'.repeat(64), {})
+    expect(fake.calls.find((call) => call.name === 'start_public_simulation_session')?.args)
+      .toMatchObject({ p_idempotency_key: null })
+  })
+
   it('fails closed when the public session capability is rejected by the server', async () => {
     const accessToken = 'd'.repeat(64)
     const initial = sessionRow()

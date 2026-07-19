@@ -191,7 +191,7 @@ export interface SimulationRepository {
   duplicate(id: string): Promise<Simulation>
   remove(id: string): Promise<void>
   lookupPublicToken(token: string): Promise<PublicSimulationResult>
-  createSession(token: string, details: Record<string, string>): Promise<SimulationSession>
+  createSession(token: string, details: Record<string, string>, idempotencyKey?: string): Promise<SimulationSession>
   getSession(id: string): Promise<SimulationSession | null>
   listSessions(simulationId: string): Promise<SimulationSession[]>
   updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession>

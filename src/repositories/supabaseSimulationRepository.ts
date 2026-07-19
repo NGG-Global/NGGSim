@@ -199,12 +199,17 @@ export class SupabaseSimulationRepository implements SimulationRepository {
     return { state: 'available', simulation: mapParticipantSimulationRpc(response.data) }
   }
 
-  async createSession(token: string, details: Record<string, string>): Promise<SimulationSession> {
+  async createSession(
+    token: string,
+    details: Record<string, string>,
+    idempotencyKey?: string,
+  ): Promise<SimulationSession> {
     const client = this.requireClient()
     const response = await client.rpc('start_public_simulation_session', {
       p_public_token: token,
       p_details: details,
       p_consent_version: 'pilot-v1',
+      p_idempotency_key: idempotencyKey ?? null,
     })
     if (response.error) throw toRepositoryError(response.error, 'לא הצלחנו להתחיל את הסימולציה.')
     const payload = response.data as unknown as PublicSessionRpcPayload

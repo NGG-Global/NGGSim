@@ -20,6 +20,13 @@ export function ParticipantLandingPage() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
   const [starting, setStarting] = useState(false)
+  // Stable for the lifetime of this attempt so a retried submission collapses
+  // into a single participant/session on the server instead of duplicating it.
+  const [idempotencyKey] = useState(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`,
+  )
 
   if (query.isLoading && !result) return <RepositoryLoadingState label="טוענים את תדריך הסימולציה…" />
   if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
@@ -41,7 +48,7 @@ export function ParticipantLandingPage() {
     }
     setStarting(true)
     try {
-      const session = await startParticipantSession(repository, publicToken, details)
+      const session = await startParticipantSession(repository, publicToken, details, idempotencyKey)
       navigate(`/simulation/${publicToken}/session?session=${session.id}`)
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : 'לא הצלחנו להתחיל את הסימולציה.')
