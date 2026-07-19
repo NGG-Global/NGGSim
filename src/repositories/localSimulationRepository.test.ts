@@ -10,8 +10,8 @@ describe('localSimulationRepository', () => {
     resetDemoStorage()
   })
 
-  it('returns a strictly reduced participant view without internal data', () => {
-    const result = getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)
+  it('returns a strictly reduced participant view without internal data', async () => {
+    const result = await getParticipantSimulationByToken(simulationRepository, DEMO_PUBLISHED_TOKEN)
     expect(result.state).toBe('available')
     if (result.state !== 'available') return
 
@@ -23,9 +23,9 @@ describe('localSimulationRepository', () => {
     expect(result.simulation.character).toEqual({ name: 'נועם לוי', role: 'מפתח בכיר' })
   })
 
-  it('publishes a valid draft with an unpredictable token and public link', () => {
-    const draft = simulationRepository.create()
-    const updated = simulationRepository.update(draft.id, {
+  it('publishes a valid draft with an unpredictable token and public link', async () => {
+    const draft = await simulationRepository.create()
+    const updated = await simulationRepository.update(draft.id, {
       title: 'בדיקת פרסום',
       scenario: { ...draft.scenario, description: 'שיחה על פער בביצועים' },
       character: { ...draft.character, name: 'דמות בדיקה' },
@@ -37,37 +37,37 @@ describe('localSimulationRepository', () => {
         conversationGoal: 'להגיע להסכמה',
       },
     })
-    const published = simulationRepository.publish(updated.id)
+    const published = await simulationRepository.publish(updated.id)
 
     expect(published.status).toBe('published')
     expect(published.publicToken).toMatch(/^[a-z0-9]{20,}$/)
     expect(published.shareLink?.url).toContain(`/simulation/${published.publicToken}`)
-    expect(getParticipantSimulationByToken(published.publicToken!).state).toBe('available')
+    expect((await getParticipantSimulationByToken(simulationRepository, published.publicToken!)).state).toBe('available')
   })
 
-  it('revokes the old public token when publication is cancelled', () => {
-    const demo = simulationRepository.list().find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
-    simulationRepository.unpublish(demo.id)
-    expect(getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'unpublished' })
+  it('revokes the old public token when publication is cancelled', async () => {
+    const demo = (await simulationRepository.list()).find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
+    await simulationRepository.unpublish(demo.id)
+    expect(await getParticipantSimulationByToken(simulationRepository, DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'unpublished' })
   })
 
-  it('saves and completes a demo session', () => {
-    const session = startParticipantSession(DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקת משתמש' })
-    const completed = simulationRepository.completeSession(session.id, 73, [
+  it('saves and completes a demo session', async () => {
+    const session = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקת משתמש' })
+    const completed = await simulationRepository.completeSession(session.id, 73, [
       { id: 'entry-1', speaker: 'participant', text: 'שלום', timestampSeconds: 3 },
     ])
 
     expect(completed.status).toBe('completed')
     expect(completed.durationSeconds).toBe(73)
-    expect(simulationRepository.getReport(session.id)?.scores).toBeDefined()
+    expect((await simulationRepository.getReport(session.id))?.scores).toBeDefined()
   })
 
-  it('marks replaced and deleted tokens with a friendly reason', () => {
-    const demo = simulationRepository.list().find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
-    const regenerated = simulationRepository.regeneratePublicToken(demo.id)
-    expect(getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'replaced' })
+  it('marks replaced and deleted tokens with a friendly reason', async () => {
+    const demo = (await simulationRepository.list()).find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
+    const regenerated = await simulationRepository.regeneratePublicToken(demo.id)
+    expect(await getParticipantSimulationByToken(simulationRepository, DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'replaced' })
 
-    simulationRepository.remove(regenerated.id)
-    expect(getParticipantSimulationByToken(regenerated.publicToken!)).toEqual({ state: 'unavailable', reason: 'deleted' })
+    await simulationRepository.remove(regenerated.id)
+    expect(await getParticipantSimulationByToken(simulationRepository, regenerated.publicToken!)).toEqual({ state: 'unavailable', reason: 'deleted' })
   })
 })

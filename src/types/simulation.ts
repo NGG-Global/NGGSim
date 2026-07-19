@@ -149,7 +149,7 @@ export interface SimulationSession {
   startedAt: string
   endedAt: string | null
   durationSeconds: number
-  status: 'in_progress' | 'completed'
+  status: 'created' | 'ready' | 'in_progress' | 'processing' | 'completed' | 'failed' | 'expired'
   conversationState: ConversationState
   transcript: TranscriptEntry[]
 }
@@ -180,20 +180,21 @@ export type PublicSimulationResult =
   | { state: 'unavailable'; reason: PublicUnavailableReason }
 
 export interface SimulationRepository {
-  list(): Simulation[]
-  getById(id: string): Simulation | null
-  create(input?: Partial<Simulation>): Simulation
-  update(id: string, patch: Partial<Simulation>): Simulation
-  publish(id: string): Simulation
-  unpublish(id: string): Simulation
-  regeneratePublicToken(id: string): Simulation
-  duplicate(id: string): Simulation
-  remove(id: string): void
-  lookupPublicToken(token: string): { simulation: Simulation | null; reason?: PublicUnavailableReason }
-  createSession(simulationId: string, token: string, details: Record<string, string>): SimulationSession
-  getSession(id: string): SimulationSession | null
-  listSessions(simulationId: string): SimulationSession[]
-  updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): SimulationSession
-  completeSession(id: string, durationSeconds: number, transcript: TranscriptEntry[]): SimulationSession
-  getReport(sessionId: string): SimulationReport | null
+  readonly provider: 'local' | 'supabase'
+  list(): Promise<Simulation[]>
+  getById(id: string): Promise<Simulation | null>
+  create(input?: Partial<Simulation>): Promise<Simulation>
+  update(id: string, patch: Partial<Simulation>): Promise<Simulation>
+  publish(id: string): Promise<Simulation>
+  unpublish(id: string): Promise<Simulation>
+  regeneratePublicToken(id: string): Promise<Simulation>
+  duplicate(id: string): Promise<Simulation>
+  remove(id: string): Promise<void>
+  lookupPublicToken(token: string): Promise<PublicSimulationResult>
+  createSession(token: string, details: Record<string, string>): Promise<SimulationSession>
+  getSession(id: string): Promise<SimulationSession | null>
+  listSessions(simulationId: string): Promise<SimulationSession[]>
+  updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession>
+  completeSession(id: string, durationSeconds: number, transcript: TranscriptEntry[]): Promise<SimulationSession>
+  getReport(sessionId: string): Promise<SimulationReport | null>
 }

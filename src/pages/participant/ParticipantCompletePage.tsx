@@ -1,17 +1,31 @@
 import { CheckCircle2, RefreshCw, Sparkles } from 'lucide-react'
-import { useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PublicUnavailableState } from '../../components/PublicUnavailableState'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { Button } from '../../components/ui/Button'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
 import { getParticipantSimulationByToken } from '../../services/participantSimulationService'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 
 export function ParticipantCompletePage() {
   const { publicToken = '' } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const result = useMemo(() => getParticipantSimulationByToken(publicToken), [publicToken])
-  const session = useMemo(() => simulationRepository.getSession(searchParams.get('session') ?? ''), [searchParams])
+  const repository = useSimulationRepository()
+  const sessionId = searchParams.get('session') ?? ''
+  const query = useRepositoryQuery(async () => {
+    const [result, session] = await Promise.all([
+      getParticipantSimulationByToken(repository, publicToken),
+      repository.getSession(sessionId),
+    ])
+    return { result, session }
+  }, [repository, publicToken, sessionId])
+  const result = query.data?.result
+  const session = query.data?.session
+
+  if (query.isLoading && !query.data) return <RepositoryLoadingState label="טוענים את סיכום הניסיון…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
+  if (!result) return <PublicUnavailableState reason="not_found" />
 
   if (result.state === 'unavailable') return <PublicUnavailableState reason={result.reason} />
 
@@ -20,7 +34,7 @@ export function ParticipantCompletePage() {
       <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><CheckCircle2 className="h-8 w-8" aria-hidden="true" /></span>
       <p className="mt-5 text-sm font-bold text-[#5b756e]">{result.simulation.title}</p>
       <h1 className="mt-2 text-3xl font-black tracking-tight text-ink">הסימולציה הסתיימה</h1>
-      <p className="mx-auto mt-4 max-w-lg leading-7 text-[#526b65]">תודה על ההשתתפות. התשובות והניסיון נשמרו בהצלחה בסביבת ההדגמה המקומית.</p>
+      <p className="mx-auto mt-4 max-w-lg leading-7 text-[#526b65]">{repository.provider === 'local' ? 'תודה על ההשתתפות. התשובות והניסיון נשמרו בהצלחה בסביבת ההדגמה המקומית.' : 'תודה על ההשתתפות. הניסיון נשמר בהצלחה בסביבת הפיילוט המאובטחת.'}</p>
 
       {result.simulation.participantBrief.showFeedback && (
         <section className="mt-8 rounded-2xl border border-[#dbe6e2] bg-[#f1f6f3] p-5 text-right">

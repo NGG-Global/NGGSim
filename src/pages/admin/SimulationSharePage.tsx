@@ -1,19 +1,25 @@
 import { Check, Copy, Download, ExternalLink, Link2, Link2Off, RefreshCw } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Toast } from '../../components/ui/Toast'
-import { useRepositoryRevision } from '../../hooks/useRepositoryRevision'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 
 export function SimulationSharePage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const revision = useRepositoryRevision()
-  const simulation = useMemo(() => simulationRepository.getById(id), [id, revision])
+  const repository = useSimulationRepository()
+  const query = useRepositoryQuery(() => repository.getById(id), [repository, id])
+  const simulation = query.data
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
+  const [mutation, setMutation] = useState<'unpublish' | 'regenerate' | null>(null)
+
+  if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים את פרטי השיתוף…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
 
   if (!simulation) return <div className="rounded-3xl bg-white p-10 text-center"><h1 className="text-2xl font-bold">הסימולציה לא נמצאה</h1><Button className="mt-5" onClick={() => navigate('/admin/simulations')}>חזרה</Button></div>
 
@@ -50,16 +56,32 @@ export function SimulationSharePage() {
     setToast({ message: 'קוד ה־QR הורד כתמונה.', tone: 'success' })
   }
 
-  const unpublish = () => {
+  const unpublish = async () => {
     if (!window.confirm('לבטל את הפרסום? הקישור הציבורי יפסיק לעבוד מיד.')) return
-    simulationRepository.unpublish(simulation.id)
-    setToast({ message: 'הפרסום בוטל. הקישור הציבורי אינו פעיל עוד.', tone: 'success' })
+    setMutation('unpublish')
+    try {
+      await repository.unpublish(simulation.id)
+      setToast({ message: 'הפרסום בוטל. הקישור הציבורי אינו פעיל עוד.', tone: 'success' })
+      query.reload()
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו לבטל את הפרסום.', tone: 'error' })
+    } finally {
+      setMutation(null)
+    }
   }
 
-  const regenerate = () => {
+  const regenerate = async () => {
     if (!window.confirm('ליצור קישור חדש? הקישור הקודם יפסיק לעבוד.')) return
-    simulationRepository.regeneratePublicToken(simulation.id)
-    setToast({ message: 'נוצר קישור חדש והקישור הקודם בוטל.', tone: 'success' })
+    setMutation('regenerate')
+    try {
+      await repository.regeneratePublicToken(simulation.id)
+      setToast({ message: 'נוצר קישור חדש והקישור הקודם בוטל.', tone: 'success' })
+      query.reload()
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו ליצור קישור חדש.', tone: 'error' })
+    } finally {
+      setMutation(null)
+    }
   }
 
   return (
@@ -75,7 +97,7 @@ export function SimulationSharePage() {
         <div className="space-y-5">
           <section className="rounded-3xl border border-[#dce5e1] bg-white p-6">
             <h2 className="text-lg font-bold">כתובת הסימולציה</h2>
-            <p className="mt-1 text-sm text-[#657a74]">הקישור פעיל רק כל עוד היישום המקומי פועל במחשב הזה.</p>
+            <p className="mt-1 text-sm text-[#657a74]">{repository.provider === 'local' ? 'הקישור פעיל רק כל עוד היישום המקומי פועל במחשב הזה.' : 'הקישור נשמר ב־Supabase ופעיל בהתאם לסטטוס הפרסום.'}</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <input readOnly value={publicUrl} dir="ltr" aria-label="כתובת הסימולציה הציבורית" className="text-input min-w-0 flex-1 text-left" onFocus={(event) => event.target.select()} />
               <Button icon={<Copy className="h-4 w-4" />} onClick={() => copyText(publicUrl, 'הקישור הועתק.')}>העתקת קישור</Button>
@@ -93,8 +115,8 @@ export function SimulationSharePage() {
 
           <div className="flex flex-wrap gap-2">
             <Button disabled={simulation.status !== 'published'} icon={<ExternalLink className="h-4 w-4" />} onClick={() => window.open(publicUrl, '_blank', 'noopener,noreferrer')}>פתיחת קישור המשתתף</Button>
-            <Button variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={regenerate}>יצירת קישור חדש</Button>
-            <Button variant="danger" icon={<Link2Off className="h-4 w-4" />} disabled={simulation.status !== 'published'} onClick={unpublish}>ביטול פרסום</Button>
+            <Button disabled={mutation !== null} variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={regenerate}>{mutation === 'regenerate' ? 'יוצרים קישור…' : 'יצירת קישור חדש'}</Button>
+            <Button variant="danger" icon={<Link2Off className="h-4 w-4" />} disabled={simulation.status !== 'published' || mutation !== null} onClick={unpublish}>{mutation === 'unpublish' ? 'מבטלים…' : 'ביטול פרסום'}</Button>
             <Button variant="ghost" onClick={() => navigate(`/admin/simulations/${id}/edit`)}>חזרה לעריכה</Button>
           </div>
         </div>

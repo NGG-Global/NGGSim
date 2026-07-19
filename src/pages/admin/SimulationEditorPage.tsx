@@ -1,11 +1,13 @@
 import { ArrowLeft, ArrowRight, Eye, Save, Send, Share2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { Toast } from '../../components/ui/Toast'
 import { SimulationFormSteps } from '../../features/simulations/SimulationFormSteps'
 import { WizardStepNav, wizardSteps } from '../../features/simulations/WizardStepNav'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 import type { Simulation } from '../../types/simulation'
 
 type SaveState = 'saved' | 'saving' | 'unsaved'
@@ -13,31 +15,48 @@ type SaveState = 'saved' | 'saving' | 'unsaved'
 export function SimulationEditorPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const storedSimulation = useMemo(() => simulationRepository.getById(id), [id])
-  const [simulation, setSimulation] = useState<Simulation | null>(storedSimulation)
+  const repository = useSimulationRepository()
+  const query = useRepositoryQuery(() => repository.getById(id), [repository, id])
+  const [simulation, setSimulation] = useState<Simulation | null>(null)
   const [step, setStep] = useState(0)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
   const ready = useRef(false)
+  const changeRevision = useRef(0)
+  const [publishing, setPublishing] = useState(false)
 
   useEffect(() => {
-    ready.current = true
-  }, [])
+    if (query.data !== undefined) {
+      setSimulation(query.data)
+      setSaveState('saved')
+      ready.current = true
+    }
+  }, [query.data])
 
   useEffect(() => {
-    if (!simulation || !ready.current || saveState !== 'unsaved') return
-    const timeout = window.setTimeout(() => {
+    if (!simulation || !ready.current || saveState !== 'unsaved' || publishing) return
+    const capturedRevision = changeRevision.current
+    const snapshot = simulation
+    const timeout = window.setTimeout(async () => {
       try {
         setSaveState('saving')
-        simulationRepository.update(simulation.id, simulation)
-        setSaveState('saved')
+        const saved = await repository.update(snapshot.id, snapshot)
+        if (changeRevision.current === capturedRevision) {
+          setSimulation(saved)
+          setSaveState('saved')
+        } else {
+          setSaveState('unsaved')
+        }
       } catch (error) {
         setSaveState('unsaved')
         setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו לשמור את הטיוטה.', tone: 'error' })
       }
     }, 650)
     return () => window.clearTimeout(timeout)
-  }, [simulation, saveState])
+  }, [publishing, repository, simulation, saveState])
+
+  if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים את הסימולציה…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
 
   if (!simulation) {
     return (
@@ -50,32 +69,46 @@ export function SimulationEditorPage() {
   }
 
   const change = (patch: Partial<Simulation>) => {
+    changeRevision.current += 1
     setSimulation((current) => current ? { ...current, ...patch } : current)
     setSaveState('unsaved')
   }
 
-  const saveNow = (): Simulation => {
-    const saved = simulationRepository.update(simulation.id, simulation)
-    setSimulation(saved)
-    setSaveState('saved')
-    setToast({ message: 'הטיוטה נשמרה בדפדפן.', tone: 'success' })
-    return saved
-  }
-
-  const openPreview = (mode: 'facilitator' | 'participant') => {
-    saveNow()
-    navigate(`/admin/simulations/${simulation.id}/preview?mode=${mode}`)
-  }
-
-  const publish = () => {
+  const saveNow = async (): Promise<Simulation | null> => {
+    setSaveState('saving')
     try {
-      simulationRepository.update(simulation.id, simulation)
-      const published = simulationRepository.publish(simulation.id)
+      const saved = await repository.update(simulation.id, simulation)
+      setSimulation(saved)
+      setSaveState('saved')
+      setToast({ message: repository.provider === 'local' ? 'הטיוטה נשמרה בדפדפן.' : 'הטיוטה נשמרה בסביבת העבודה.', tone: 'success' })
+      return saved
+    } catch (error) {
+      setSaveState('unsaved')
+      setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו לשמור את הטיוטה.', tone: 'error' })
+      return null
+    }
+  }
+
+  const openPreview = async (mode: 'facilitator' | 'participant') => {
+    try {
+      const saved = await saveNow()
+      if (saved) navigate(`/admin/simulations/${simulation.id}/preview?mode=${mode}`)
+    } catch { /* saveNow handles user-facing errors. */ }
+  }
+
+  const publish = async () => {
+    setPublishing(true)
+    try {
+      await repository.update(simulation.id, simulation)
+      const published = await repository.publish(simulation.id)
       setSimulation(published)
       setSaveState('saved')
       navigate(`/admin/simulations/${simulation.id}/share`)
     } catch (error) {
+      setSaveState('unsaved')
       setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו לפרסם את הסימולציה.', tone: 'error' })
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -91,7 +124,7 @@ export function SimulationEditorPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" icon={<Save className="h-4 w-4" />} onClick={saveNow}>שמירה כטיוטה</Button>
+          <Button disabled={saveState === 'saving' || publishing} variant="secondary" icon={<Save className="h-4 w-4" />} onClick={() => { void saveNow() }}>שמירה כטיוטה</Button>
           {simulation.status === 'published' && <Button variant="secondary" icon={<Share2 className="h-4 w-4" />} onClick={() => navigate(`/admin/simulations/${simulation.id}/share`)}>מסך שיתוף</Button>}
         </div>
       </div>
@@ -109,7 +142,7 @@ export function SimulationEditorPage() {
             <>
               <Button variant="ghost" icon={<Eye className="h-4 w-4" />} onClick={() => openPreview('facilitator')}>תצוגת מנחה</Button>
               <Button variant="ghost" icon={<Eye className="h-4 w-4" />} onClick={() => openPreview('participant')}>תצוגת משתתף</Button>
-              <Button icon={<Send className="h-4 w-4" />} onClick={publish}>פרסום הסימולציה</Button>
+              <Button disabled={publishing || saveState === 'saving'} icon={<Send className="h-4 w-4" />} onClick={publish}>{publishing ? 'מפרסמים…' : 'פרסום הסימולציה'}</Button>
             </>
           )}
         </div>
