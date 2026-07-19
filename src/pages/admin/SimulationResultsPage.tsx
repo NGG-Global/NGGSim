@@ -1,19 +1,28 @@
 import { BarChart3, CheckCircle2, Clock3, MessageSquareText, Users } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
-import { useRepositoryRevision } from '../../hooks/useRepositoryRevision'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 
 export function SimulationResultsPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const revision = useRepositoryRevision()
-  const simulation = useMemo(() => simulationRepository.getById(id), [id, revision])
-  const sessions = useMemo(() => simulationRepository.listSessions(id), [id, revision])
-  const [selectedId, setSelectedId] = useState<string | null>(sessions[0]?.id ?? null)
+  const repository = useSimulationRepository()
+  const query = useRepositoryQuery(async () => {
+    const [simulation, sessions] = await Promise.all([repository.getById(id), repository.listSessions(id)])
+    const reports = new Map((await Promise.all(sessions.map(async (session) => [session.id, await repository.getReport(session.id)] as const))))
+    return { simulation, sessions, reports }
+  }, [repository, id])
+  const simulation = query.data?.simulation
+  const sessions = query.data?.sessions ?? []
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = sessions.find((session) => session.id === selectedId) ?? sessions[0]
-  const report = selected ? simulationRepository.getReport(selected.id) : null
+  const report = selected ? query.data?.reports.get(selected.id) ?? null : null
+
+  if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים ניסיונות ודוחות…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
 
   if (!simulation) return <div className="rounded-3xl bg-white p-10 text-center"><h1 className="text-2xl font-bold">הסימולציה לא נמצאה</h1><Button className="mt-5" onClick={() => navigate('/admin/simulations')}>חזרה</Button></div>
 
@@ -23,7 +32,7 @@ export function SimulationResultsPage() {
         <div>
           <p className="eyebrow">תוצאות ודוחות</p>
           <h1 className="page-title">{simulation.title}</h1>
-          <p className="mt-2 text-[#60756f]">כל הסיכומים, הציונים והתמלולים במסך זה הם נתוני הדגמה.</p>
+          <p className="mt-2 text-[#60756f]">{repository.provider === 'local' ? 'כל הסיכומים, הציונים והתמלולים במסך זה הם נתוני הדגמה.' : 'הנתונים במסך זה נטענים מסביבת העבודה המאובטחת של המנחה.'}</p>
         </div>
         <Button variant="secondary" onClick={() => navigate('/admin/simulations')}>חזרה לסימולציות</Button>
       </div>

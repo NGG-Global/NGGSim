@@ -8,40 +8,61 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Toast } from '../../components/ui/Toast'
-import { useRepositoryRevision } from '../../hooks/useRepositoryRevision'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 import type { Simulation } from '../../types/simulation'
 
 export function AdminDashboardPage() {
-  const revision = useRepositoryRevision()
+  const repository = useSimulationRepository()
   const navigate = useNavigate()
-  const [toast, setToast] = useState('')
-  const simulations = useMemo(() => simulationRepository.list(), [revision])
+  const query = useRepositoryQuery(() => repository.list(), [repository])
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const simulations = query.data ?? []
   const publishedCount = simulations.filter((simulation) => simulation.status === 'published').length
   const draftCount = simulations.filter((simulation) => simulation.status !== 'published').length
   const attemptCount = simulations.reduce((total, simulation) => total + simulation.attemptCount, 0)
 
-  const duplicate = (simulation: Simulation) => {
-    const copy = simulationRepository.duplicate(simulation.id)
-    setToast('נוצר עותק חדש ונשמר כטיוטה.')
-    window.setTimeout(() => navigate(`/admin/simulations/${copy.id}/edit`), 400)
+  const duplicate = async (simulation: Simulation) => {
+    setBusyId(simulation.id)
+    try {
+      const copy = await repository.duplicate(simulation.id)
+      setToast({ message: 'נוצר עותק חדש ונשמר כטיוטה.', tone: 'success' })
+      navigate(`/admin/simulations/${copy.id}/edit`)
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו לשכפל את הסימולציה.', tone: 'error' })
+    } finally {
+      setBusyId(null)
+    }
   }
 
-  const remove = (simulation: Simulation) => {
+  const remove = async (simulation: Simulation) => {
     const confirmed = window.confirm(`למחוק את „${simulation.title || 'הסימולציה ללא שם'}”? הפעולה תבטל גם את הקישור הציבורי.`)
     if (!confirmed) return
-    simulationRepository.remove(simulation.id)
-    setToast('הסימולציה נמחקה והקישור שלה אינו פעיל עוד.')
+    setBusyId(simulation.id)
+    try {
+      await repository.remove(simulation.id)
+      setToast({ message: 'הסימולציה נמחקה והקישור שלה אינו פעיל עוד.', tone: 'success' })
+      query.reload()
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : 'לא הצלחנו למחוק את הסימולציה.', tone: 'error' })
+    } finally {
+      setBusyId(null)
+    }
   }
+
+  if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים את סביבת העבודה…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
 
   return (
     <div className="space-y-8">
-      {toast && <Toast message={toast} onClose={() => setToast('')} />}
+      {toast && <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />}
       <section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
         <div>
           <p className="eyebrow">מרחב המנחים</p>
@@ -62,8 +83,8 @@ export function AdminDashboardPage() {
       <section>
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-ink">הסימולציות שלי</h2>
-            <p className="mt-1 text-sm text-[#647b75]">{simulations.length} סימולציות בסביבת העבודה</p>
+            <h2 className="text-xl font-bold text-ink">כל הסימולציות</h2>
+            <p className="mt-1 text-sm text-[#647b75]">{simulations.length} סימולציות בסביבת העבודה המשותפת</p>
           </div>
         </div>
 
@@ -98,10 +119,10 @@ export function AdminDashboardPage() {
                   <div className="flex flex-wrap gap-1.5" aria-label={`פעולות עבור ${simulation.title}`}>
                     <IconLink to={`/admin/simulations/${simulation.id}/preview`} label="צפייה"><Eye /></IconLink>
                     <IconLink to={`/admin/simulations/${simulation.id}/edit`} label="עריכה"><FilePenLine /></IconLink>
-                    <Button variant="ghost" className="min-h-10 px-2.5" onClick={() => duplicate(simulation)} title="שכפול" aria-label={`שכפול ${simulation.title}`}><Copy className="h-4 w-4" /></Button>
+                    <Button disabled={busyId === simulation.id} variant="ghost" className="min-h-10 px-2.5" onClick={() => duplicate(simulation)} title="שכפול" aria-label={`שכפול ${simulation.title}`}><Copy className="h-4 w-4" /></Button>
                     {simulation.status === 'published' && <IconLink to={`/admin/simulations/${simulation.id}/share`} label="שיתוף"><Link2 /></IconLink>}
                     <IconLink to={`/admin/simulations/${simulation.id}/results`} label="תוצאות"><BarChart3 /></IconLink>
-                    <Button variant="ghost" className="min-h-10 px-2.5 text-red-700 hover:bg-red-50" onClick={() => remove(simulation)} title="מחיקה" aria-label={`מחיקת ${simulation.title}`}><Trash2 className="h-4 w-4" /></Button>
+                    <Button disabled={busyId === simulation.id} variant="ghost" className="min-h-10 px-2.5 text-red-700 hover:bg-red-50" onClick={() => remove(simulation)} title="מחיקה" aria-label={`מחיקת ${simulation.title}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               </article>

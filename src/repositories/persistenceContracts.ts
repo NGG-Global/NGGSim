@@ -8,12 +8,12 @@ import type {
 } from '../types/simulation'
 
 /**
- * גבול ההחלפה בין אחסון מקומי לבין backend עתידי.
- * מימוש Supabase עתידי יממש את אותו חוזה שה־localStorage מממש כיום.
+ * גבול ההחלפה בין אחסון demo מקומי לבין Supabase.
+ * שני המימושים אסינכרוניים ומממשים את אותו חוזה.
  */
 export type SimulationPersistencePort = SimulationRepository
 
-/** מיפוי רעיוני בלבד לטבלאות העתידיות; אין כאן חיבור רשת. */
+/** שמות הישויות המתאימות לטבלאות Supabase; המיפוי בפועל מפורש בקובצי ה־mapper. */
 export interface FutureSupabaseTables {
   facilitators: Array<{ id: string; email: string; createdAt: string }>
   simulations: Simulation[]

@@ -2,12 +2,15 @@ import { createBlankSimulation } from '../data/defaults'
 import { createDemoReports, createDemoSessions, createDemoSimulations } from '../data/demoData'
 import type {
   PublicUnavailableReason,
+  PublicSimulationResult,
   Simulation,
   SimulationReport,
   SimulationRepository,
   SimulationSession,
   TranscriptEntry,
 } from '../types/simulation'
+import { toParticipantSimulationView } from '../services/participantSimulationMapper'
+import { validatePublishable } from './simulationValidation'
 
 const SIMULATIONS_KEY = 'simulab.simulations.v1'
 const SESSIONS_KEY = 'simulab.sessions.v1'
@@ -67,38 +70,21 @@ function currentBaseUrl(): string {
   return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
 }
 
-function validatePublishable(simulation: Simulation): void {
-  if (!simulation.title.trim()) {
-    throw new Error('יש להזין שם לסימולציה לפני הפרסום.')
-  }
-  const brief = simulation.participantBrief
-  if (!brief.title.trim() || !brief.shortDescription.trim() || !brief.participantRole.trim() || !brief.conversationGoal.trim()) {
-    throw new Error('יש להשלים את תדריך המשתתף לפני הפרסום.')
-  }
-  if (!simulation.scenario.description.trim()) {
-    throw new Error('יש להשלים את תיאור הסיטואציה לפני הפרסום.')
-  }
-  if (!simulation.character.name.trim()) {
-    throw new Error('יש להגדיר שם לדמות לפני הפרסום.')
-  }
-}
+export class LocalSimulationRepository implements SimulationRepository {
+  readonly provider = 'local' as const
 
-class LocalSimulationRepository implements SimulationRepository {
-  constructor() {
+  async list(): Promise<Simulation[]> {
     ensureSeeded()
-  }
-
-  list(): Simulation[] {
     return clone(readJson<Simulation[]>(SIMULATIONS_KEY, []))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
 
-  getById(id: string): Simulation | null {
-    return this.list().find((simulation) => simulation.id === id) ?? null
+  async getById(id: string): Promise<Simulation | null> {
+    return (await this.list()).find((simulation) => simulation.id === id) ?? null
   }
 
-  create(input: Partial<Simulation> = {}): Simulation {
-    const simulations = this.list()
+  async create(input: Partial<Simulation> = {}): Promise<Simulation> {
+    const simulations = await this.list()
     const simulation = { ...createBlankSimulation(uid('sim')), ...clone(input) }
     simulations.unshift(simulation)
     writeJson(SIMULATIONS_KEY, simulations)
@@ -106,8 +92,8 @@ class LocalSimulationRepository implements SimulationRepository {
     return clone(simulation)
   }
 
-  update(id: string, patch: Partial<Simulation>): Simulation {
-    const simulations = this.list()
+  async update(id: string, patch: Partial<Simulation>): Promise<Simulation> {
+    const simulations = await this.list()
     const index = simulations.findIndex((simulation) => simulation.id === id)
     if (index < 0) throw new Error('הסימולציה לא נמצאה.')
     const updated: Simulation = {
@@ -122,8 +108,8 @@ class LocalSimulationRepository implements SimulationRepository {
     return clone(updated)
   }
 
-  publish(id: string): Simulation {
-    const simulation = this.getById(id)
+  async publish(id: string): Promise<Simulation> {
+    const simulation = await this.getById(id)
     if (!simulation) throw new Error('הסימולציה לא נמצאה.')
     validatePublishable(simulation)
     const token = simulation.publicToken ?? this.createPublicToken()
@@ -144,8 +130,8 @@ class LocalSimulationRepository implements SimulationRepository {
     })
   }
 
-  unpublish(id: string): Simulation {
-    const simulation = this.getById(id)
+  async unpublish(id: string): Promise<Simulation> {
+    const simulation = await this.getById(id)
     if (!simulation) throw new Error('הסימולציה לא נמצאה.')
     if (simulation.publicToken) this.revoke(simulation.publicToken, 'unpublished')
     return this.update(id, {
@@ -154,8 +140,8 @@ class LocalSimulationRepository implements SimulationRepository {
     })
   }
 
-  regeneratePublicToken(id: string): Simulation {
-    const simulation = this.getById(id)
+  async regeneratePublicToken(id: string): Promise<Simulation> {
+    const simulation = await this.getById(id)
     if (!simulation) throw new Error('הסימולציה לא נמצאה.')
     validatePublishable(simulation)
     if (simulation.publicToken) this.revoke(simulation.publicToken, 'replaced')
@@ -174,8 +160,8 @@ class LocalSimulationRepository implements SimulationRepository {
     })
   }
 
-  duplicate(id: string): Simulation {
-    const source = this.getById(id)
+  async duplicate(id: string): Promise<Simulation> {
+    const source = await this.getById(id)
     if (!source) throw new Error('הסימולציה לא נמצאה.')
     const duplicate = clone(source)
     duplicate.id = uid('sim')
@@ -187,15 +173,15 @@ class LocalSimulationRepository implements SimulationRepository {
     duplicate.attemptCount = 0
     duplicate.createdAt = new Date().toISOString()
     duplicate.updatedAt = duplicate.createdAt
-    const simulations = this.list()
+    const simulations = await this.list()
     simulations.unshift(duplicate)
     writeJson(SIMULATIONS_KEY, simulations)
     notify()
     return clone(duplicate)
   }
 
-  remove(id: string): void {
-    const simulations = this.list()
+  async remove(id: string): Promise<void> {
+    const simulations = await this.list()
     const simulation = simulations.find((item) => item.id === id)
     if (!simulation) return
     if (simulation.publicToken) this.revoke(simulation.publicToken, 'deleted')
@@ -203,25 +189,26 @@ class LocalSimulationRepository implements SimulationRepository {
     notify()
   }
 
-  lookupPublicToken(token: string): { simulation: Simulation | null; reason?: PublicUnavailableReason } {
+  async lookupPublicToken(token: string): Promise<PublicSimulationResult> {
     const normalizedToken = token.trim()
-    const simulation = this.list().find((item) => item.publicToken === normalizedToken)
+    const simulation = (await this.list()).find((item) => item.publicToken === normalizedToken)
     if (simulation) {
       if (simulation.status === 'published' && simulation.shareLink?.isActive) {
-        return { simulation }
+        return { state: 'available', simulation: toParticipantSimulationView(simulation) }
       }
-      if (simulation.status === 'draft') return { simulation: null, reason: 'draft' }
-      return { simulation: null, reason: 'unpublished' }
+      if (simulation.status === 'draft') return { state: 'unavailable', reason: 'draft' }
+      return { state: 'unavailable', reason: 'unpublished' }
     }
     const revoked = readJson<Record<string, RevokedLink>>(REVOKED_KEY, {})
-    return { simulation: null, reason: revoked[normalizedToken]?.reason ?? 'not_found' }
+    return { state: 'unavailable', reason: revoked[normalizedToken]?.reason ?? 'not_found' }
   }
 
-  createSession(simulationId: string, token: string, details: Record<string, string>): SimulationSession {
-    const simulation = this.getById(simulationId)
-    if (!simulation || simulation.publicToken !== token || simulation.status !== 'published') {
+  async createSession(token: string, details: Record<string, string>): Promise<SimulationSession> {
+    const simulation = (await this.list()).find((item) => item.publicToken === token)
+    if (!simulation || simulation.status !== 'published') {
       throw new Error('לא ניתן להתחיל את הסימולציה מהקישור הזה.')
     }
+    const simulationId = simulation.id
     const session: SimulationSession = {
       id: uid('session'),
       simulationId,
@@ -246,17 +233,17 @@ class LocalSimulationRepository implements SimulationRepository {
     return clone(session)
   }
 
-  getSession(id: string): SimulationSession | null {
+  async getSession(id: string): Promise<SimulationSession | null> {
     return clone(readJson<SimulationSession[]>(SESSIONS_KEY, []).find((session) => session.id === id) ?? null)
   }
 
-  listSessions(simulationId: string): SimulationSession[] {
+  async listSessions(simulationId: string): Promise<SimulationSession[]> {
     return clone(readJson<SimulationSession[]>(SESSIONS_KEY, []))
       .filter((session) => session.simulationId === simulationId)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   }
 
-  updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): SimulationSession {
+  async updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession> {
     const sessions = readJson<SimulationSession[]>(SESSIONS_KEY, [])
     const index = sessions.findIndex((session) => session.id === id)
     if (index < 0) throw new Error('הניסיון לא נמצא.')
@@ -265,7 +252,7 @@ class LocalSimulationRepository implements SimulationRepository {
     return clone(sessions[index])
   }
 
-  completeSession(id: string, durationSeconds: number, transcript: TranscriptEntry[]): SimulationSession {
+  async completeSession(id: string, durationSeconds: number, transcript: TranscriptEntry[]): Promise<SimulationSession> {
     const sessions = readJson<SimulationSession[]>(SESSIONS_KEY, [])
     const index = sessions.findIndex((session) => session.id === id)
     if (index < 0) throw new Error('הניסיון לא נמצא.')
@@ -279,10 +266,10 @@ class LocalSimulationRepository implements SimulationRepository {
     }
     writeJson(SESSIONS_KEY, sessions)
 
-    const simulations = this.list()
+    const simulations = await this.list()
     const simulationIndex = simulations.findIndex((simulation) => simulation.id === sessions[index].simulationId)
     if (simulationIndex >= 0) {
-      simulations[simulationIndex].attemptCount = this.listSessions(sessions[index].simulationId).length
+      simulations[simulationIndex].attemptCount = (await this.listSessions(sessions[index].simulationId)).length
       simulations[simulationIndex].updatedAt = new Date().toISOString()
       writeJson(SIMULATIONS_KEY, simulations)
     }
@@ -303,7 +290,7 @@ class LocalSimulationRepository implements SimulationRepository {
     return clone(sessions[index])
   }
 
-  getReport(sessionId: string): SimulationReport | null {
+  async getReport(sessionId: string): Promise<SimulationReport | null> {
     return clone(readJson<SimulationReport[]>(REPORTS_KEY, []).find((report) => report.sessionId === sessionId) ?? null)
   }
 

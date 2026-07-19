@@ -1,7 +1,10 @@
 node_modules
+.pnpm-store/
 dist
 .env
 *.local
+supabase/.temp/
+supabase/.branches/
 .DS_Store
 npm-debug.log*
 

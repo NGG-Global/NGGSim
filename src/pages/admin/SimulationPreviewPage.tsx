@@ -2,18 +2,26 @@ import { ArrowRight, Eye, FilePenLine, ShieldCheck, UserRound } from 'lucide-rea
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ParticipantBriefPanel } from '../../components/ParticipantBriefPanel'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { Button } from '../../components/ui/Button'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { toParticipantSimulationView } from '../../services/participantSimulationService'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
+import type { Simulation } from '../../types/simulation'
 
 export function SimulationPreviewPage() {
   const { id = '' } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const repository = useSimulationRepository()
   const initialMode = searchParams.get('mode') === 'participant' ? 'participant' : 'facilitator'
   const [mode, setMode] = useState<'facilitator' | 'participant'>(initialMode)
-  const simulation = simulationRepository.getById(id)
+  const query = useRepositoryQuery(() => repository.getById(id), [repository, id])
+  const simulation = query.data
+
+  if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים תצוגה מקדימה…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
 
   if (!simulation) return <MissingSimulation onBack={() => navigate('/admin/simulations')} />
   const participantView = toParticipantSimulationView(simulation)
@@ -54,7 +62,7 @@ export function SimulationPreviewPage() {
   )
 }
 
-function FacilitatorPreview({ simulation }: { simulation: NonNullable<ReturnType<typeof simulationRepository.getById>> }) {
+function FacilitatorPreview({ simulation }: { simulation: Simulation }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
       <PreviewSection title="הקשר וסיטואציה">

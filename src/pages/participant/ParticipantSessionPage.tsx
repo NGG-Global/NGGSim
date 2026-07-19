@@ -1,11 +1,13 @@
 import { CircleStop, Mic, Sparkles, Volume2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PublicUnavailableState } from '../../components/PublicUnavailableState'
+import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { Button } from '../../components/ui/Button'
-import { simulationRepository } from '../../repositories/localSimulationRepository'
 import { elevenLabsService } from '../../services/elevenLabsService'
 import { getParticipantSimulationByToken } from '../../services/participantSimulationService'
+import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
+import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
 import type { ConversationState, TranscriptEntry } from '../../types/simulation'
 
 const stateLabels: Record<ConversationState, string> = {
@@ -24,31 +26,52 @@ export function ParticipantSessionPage() {
   const { publicToken = '' } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const publicResult = useMemo(() => getParticipantSimulationByToken(publicToken), [publicToken])
+  const repository = useSimulationRepository()
   const sessionId = searchParams.get('session') ?? ''
-  const session = useMemo(() => simulationRepository.getSession(sessionId), [sessionId])
-  const [elapsed, setElapsed] = useState(() => {
-    if (!session) return 0
-    if (session.status === 'completed') return session.durationSeconds
-    const elapsedFromStart = Math.max(0, Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000))
-    return Math.max(session.durationSeconds, elapsedFromStart)
-  })
+  const query = useRepositoryQuery(async () => {
+    const [publicResult, session] = await Promise.all([
+      getParticipantSimulationByToken(repository, publicToken),
+      repository.getSession(sessionId),
+    ])
+    return { publicResult, session }
+  }, [repository, publicToken, sessionId])
+  const publicResult = query.data?.publicResult
+  const session = query.data?.session
+  const [elapsed, setElapsed] = useState(0)
   const [conversationState, setConversationState] = useState<ConversationState>('listening')
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>(session?.transcript ?? [])
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [turn, setTurn] = useState(0)
   const [busy, setBusy] = useState(false)
   const conversationId = useRef('')
   const timers = useRef<number[]>([])
+  const initializedSession = useRef('')
+  const transcriptRef = useRef<TranscriptEntry[]>([])
+  const [persistenceError, setPersistenceError] = useState('')
+
+  useEffect(() => {
+    if (!session || initializedSession.current === session.id) return
+    initializedSession.current = session.id
+    const elapsedFromStart = session.status === 'completed'
+      ? session.durationSeconds
+      : Math.max(0, Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000))
+    setElapsed(Math.max(session.durationSeconds, elapsedFromStart))
+    transcriptRef.current = session.transcript
+    setTranscript(session.transcript)
+    setConversationState(session.conversationState)
+  }, [session])
 
   useEffect(() => {
     if (!session || session.status === 'completed') return
     const interval = window.setInterval(() => setElapsed((value) => {
       const next = value + 1
-      if (next % 5 === 0) simulationRepository.updateSessionProgress(session.id, { durationSeconds: next })
+      if (next % 5 === 0) {
+        repository.updateSessionProgress(session.id, { durationSeconds: next })
+          .catch((error: unknown) => setPersistenceError(error instanceof Error ? error.message : 'לא הצלחנו לשמור את זמן השיחה.'))
+      }
       return next
     }), 1000)
     return () => window.clearInterval(interval)
-  }, [session])
+  }, [repository, session])
 
   useEffect(() => {
     let active = true
@@ -63,6 +86,9 @@ export function ParticipantSessionPage() {
     }
   }, [])
 
+  if (query.isLoading && !query.data) return <RepositoryLoadingState label="טוענים את הניסיון…" />
+  if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
+  if (!publicResult) return <PublicUnavailableState reason="not_found" />
   if (publicResult.state === 'unavailable') return <PublicUnavailableState reason={publicResult.reason} />
   if (!session || session.publicToken !== publicToken) {
     return <div className="mx-auto mt-10 max-w-xl rounded-3xl border border-[#dce5e1] bg-white p-10 text-center"><h1 className="text-2xl font-bold">לא נמצא ניסיון פעיל</h1><p className="mt-3 leading-7 text-[#60756f]">אפשר לחזור לקישור שקיבלת ולהתחיל את הסימולציה מחדש.</p></div>
@@ -72,47 +98,79 @@ export function ParticipantSessionPage() {
   }
 
   const simulation = publicResult.simulation
-  const advanceConversation = () => {
+  const advanceConversation = async () => {
     if (busy) return
     setBusy(true)
-    setConversationState('thinking')
-    setTranscript((current) => {
-      const next: TranscriptEntry[] = [...current, {
+    setPersistenceError('')
+    const participantTranscript: TranscriptEntry[] = [...transcriptRef.current, {
         id: `participant-${Date.now()}`,
         speaker: 'participant',
         text: 'המשתתף/ת דיבר/ה דרך כפתור המיקרופון המדומה.',
         timestampSeconds: elapsed,
-      }]
-      simulationRepository.updateSessionProgress(session.id, { durationSeconds: elapsed, conversationState: 'thinking', transcript: next })
-      return next
-    })
-    timers.current.push(window.setTimeout(() => {
-      setConversationState('speaking')
-      setTranscript((current) => {
-        const next: TranscriptEntry[] = [...current, {
+    }]
+    try {
+      await repository.updateSessionProgress(session.id, {
+        durationSeconds: elapsed,
+        conversationState: 'thinking',
+        transcript: participantTranscript,
+      })
+      transcriptRef.current = participantTranscript
+      setTranscript(participantTranscript)
+      setConversationState('thinking')
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'לא הצלחנו לשמור את ההתקדמות.')
+      setBusy(false)
+      return
+    }
+
+    timers.current.push(window.setTimeout(async () => {
+      const characterTranscript: TranscriptEntry[] = [...transcriptRef.current, {
           id: `character-${Date.now()}`,
           speaker: 'character',
           text: demoCharacterLines[turn % demoCharacterLines.length],
           timestampSeconds: elapsed + 1,
-        }]
-        simulationRepository.updateSessionProgress(session.id, { durationSeconds: elapsed + 1, conversationState: 'speaking', transcript: next })
-        return next
-      })
+      }]
+      try {
+        await repository.updateSessionProgress(session.id, {
+          durationSeconds: elapsed + 1,
+          conversationState: 'speaking',
+          transcript: characterTranscript,
+        })
+        transcriptRef.current = characterTranscript
+        setTranscript(characterTranscript)
+        setConversationState('speaking')
+      } catch (error) {
+        setPersistenceError(error instanceof Error ? error.message : 'לא הצלחנו לשמור את תגובת הדמות.')
+        setBusy(false)
+        return
+      }
+
+      timers.current.push(window.setTimeout(async () => {
+        try {
+          await repository.updateSessionProgress(session.id, { durationSeconds: elapsed + 2, conversationState: 'listening' })
+          setConversationState('listening')
+          setTurn((value) => value + 1)
+        } catch (error) {
+          setPersistenceError(error instanceof Error ? error.message : 'לא הצלחנו לשמור את מצב השיחה.')
+        } finally {
+          setBusy(false)
+        }
+      }, 1650))
     }, 850))
-    timers.current.push(window.setTimeout(() => {
-      setConversationState('listening')
-      setTurn((value) => value + 1)
-      setBusy(false)
-      simulationRepository.updateSessionProgress(session.id, { durationSeconds: elapsed + 2, conversationState: 'listening' })
-    }, 2500))
   }
 
   const finish = async () => {
     if (!window.confirm('לסיים את הסימולציה? לאחר הסיום לא ניתן להמשיך את השיחה הזו.')) return
     setBusy(true)
-    if (conversationId.current) await elevenLabsService.endConversation(conversationId.current)
-    simulationRepository.completeSession(session.id, elapsed, transcript)
-    navigate(`/simulation/${publicToken}/complete?session=${session.id}`)
+    setPersistenceError('')
+    try {
+      if (conversationId.current) await elevenLabsService.endConversation(conversationId.current)
+      await repository.completeSession(session.id, elapsed, transcriptRef.current)
+      navigate(`/simulation/${publicToken}/complete?session=${session.id}`)
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'לא הצלחנו לסיים את הסימולציה.')
+      setBusy(false)
+    }
   }
 
   return (
@@ -152,6 +210,8 @@ export function ParticipantSessionPage() {
               {transcript.slice(-3).map((entry) => <p key={entry.id} className="mb-2 text-sm leading-6"><strong>{entry.speaker === 'participant' ? 'את/ה' : simulation.character.name}:</strong> {entry.text}</p>)}
             </div>
           )}
+
+          {persistenceError && <p role="alert" className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-800">{persistenceError}</p>}
 
           <div className="flex justify-center">
             <Button variant="danger" icon={<CircleStop className="h-4 w-4" />} onClick={finish} disabled={busy}>סיום הסימולציה</Button>
