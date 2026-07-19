@@ -1,0 +1,245 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ngg-accent: #ec2a8c;
+  --ngg-accent-hover: #d11e78;
+  --ngg-accent-active: #b01a65;
+  --ngg-accent-soft: #fdeef6;
+  --ngg-ink: #15151f;
+  --ngg-muted: #5a5a5c;
+  --ngg-subtle: #7f7e7f;
+  --ngg-canvas: #f4f4f6;
+  --ngg-border: #e5e4e7;
+  --ngg-border-strong: #c7c6c7;
+  --ngg-shadow-card: 0 2px 4px rgba(8, 8, 16, 0.06), 0 6px 16px rgba(8, 8, 16, 0.1);
+  --ngg-transition: 140ms cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    direction: rtl;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background: var(--ngg-canvas);
+    color: var(--ngg-ink);
+    font-family: "Heebo", "Assistant", "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    background: #fbd9ec;
+    color: var(--ngg-ink);
+  }
+
+  :focus-visible {
+    outline-color: var(--ngg-accent);
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply fixed right-4 top-4 z-[100] -translate-y-24 rounded-lg bg-white px-4 py-3 font-bold text-ink shadow-card transition focus:translate-y-0 focus:outline-none focus:ring-4 focus:ring-[#f7b3d6];
+  }
+
+  .eyebrow {
+    @apply mb-2 text-xs font-black uppercase tracking-[0.12em] text-coral;
+  }
+
+  .page-title {
+    @apply text-3xl font-black tracking-tight text-ink sm:text-4xl;
+  }
+
+  .button-link-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-forest px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#d11e78] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#f7b3d6];
+  }
+
+  .admin-nav-link {
+    @apply relative inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-bold text-[#3a3a40] transition hover:bg-[#f7f7f8] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#f7b3d6];
+  }
+
+  .admin-nav-link-active {
+    @apply bg-[#fdeef6] text-[#b01a65];
+  }
+
+  .admin-nav-link-active::before {
+    content: "";
+    @apply absolute bottom-2 right-0 top-2 w-[3px] rounded-full bg-forest;
+  }
+
+  .form-grid {
+    @apply grid gap-5 md:grid-cols-2;
+  }
+
+  .form-control {
+    @apply block min-w-0;
+  }
+
+  .form-label {
+    @apply mb-2 block text-sm font-bold text-ink;
+  }
+
+  .form-hint {
+    @apply -mt-1 mb-2 block text-xs leading-5 text-[#7f7e7f];
+  }
+
+  .required-mark {
+    @apply text-red-700;
+  }
+
+  .text-input {
+    @apply min-h-11 w-full rounded-lg border border-[#c7c6c7] bg-white px-3.5 py-2.5 text-[15px] leading-6 text-ink shadow-sm outline-none transition placeholder:text-[#949494] focus:border-forest focus:ring-4 focus:ring-[#fbd9ec];
+  }
+
+  .preview-tab {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-md px-4 py-2 text-sm font-bold text-[#5a5a5c] transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#f7b3d6];
+  }
+
+  .preview-tab-active {
+    @apply bg-forest text-white;
+  }
+
+  .conversation-status {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold;
+  }
+
+  .conversation-status-listening {
+    @apply bg-emerald-50 text-emerald-800;
+  }
+
+  .conversation-status-thinking {
+    @apply bg-amber-50 text-amber-900;
+  }
+
+  .conversation-status-speaking {
+    @apply bg-[#e7eef6] text-[#274c72];
+  }
+
+  .status-pulse {
+    @apply h-2.5 w-2.5 rounded-full bg-current;
+    animation: status-pulse 1.3s ease-in-out infinite;
+  }
+
+  .microphone-button {
+    @apply flex h-24 w-24 items-center justify-center rounded-full bg-forest text-white shadow-[0_6px_30px_rgba(236,42,140,0.42)] transition hover:bg-[#d11e78] focus-visible:outline-none focus-visible:ring-8 focus-visible:ring-[#f7b3d6] disabled:cursor-wait disabled:opacity-80;
+  }
+
+  .microphone-button-busy {
+    animation: microphone-breathe 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes microphone-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(236, 42, 140, 0.28), 0 6px 30px rgba(236, 42, 140, 0.42); }
+  50% { box-shadow: 0 0 0 18px rgba(236, 42, 140, 0), 0 6px 30px rgba(236, 42, 140, 0.42); }
+}
+
+/*
+ * NGG visual bridge
+ *
+ * The MVP already uses a set of literal utility colors across its pages. Keeping
+ * this mapping in one place lets the existing markup, fields, routes and states
+ * remain untouched while the full product adopts the NGG palette consistently.
+ */
+:is(
+  [class~="text-[#60756f]"], [class~="text-[#667b75]"], [class~="text-[#49625d]"],
+  [class~="text-[#526b65]"], [class~="text-[#627872]"], [class~="text-[#657a74]"],
+  [class~="text-[#687d77]"], [class~="text-[#647b75]"], [class~="text-[#5b726c]"],
+  [class~="text-[#78908a]"], [class~="text-[#4f6862]"], [class~="text-[#6d817c]"],
+  [class~="text-[#80958f]"], [class~="text-[#566f69]"], [class~="text-[#677c76]"],
+  [class~="text-[#5f7670]"], [class~="text-[#6c807b]"], [class~="text-[#5a726c]"],
+  [class~="text-[#648078]"], [class~="text-[#697d78]"], [class~="text-[#647a74]"],
+  [class~="text-[#71827e]"], [class~="text-[#5d716c]"], [class~="text-[#607871]"],
+  [class~="text-[#5b716b]"], [class~="text-[#748580]"], [class~="text-[#5b756e]"],
+  [class~="text-[#6b817c]"], [class~="text-[#6b817b]"], [class~="text-[#617770]"],
+  [class~="text-[#5d746e]"], [class~="text-[#55706a]"], [class~="text-[#34544d]"],
+  [class~="text-[#607771]"], [class~="text-[#46645c]"], [class~="text-[#687e78]"],
+  [class~="text-[#48635c]"], [class~="text-[#6a807a]"], [class~="text-[#506963]"],
+  [class~="text-[#627771]"], [class~="text-[#405b55]"]
+) {
+  color: var(--ngg-muted);
+}
+
+:is(
+  [class~="border-[#dce5e1]"], [class~="border-[#d8e3df]"], [class~="border-[#dbe5e1]"],
+  [class~="border-[#dce4e1]"], [class~="border-[#e1e8e5]"], [class~="border-[#e2e8e5]"],
+  [class~="border-[#e0e7e4]"], [class~="border-[#d9e4df]"], [class~="border-[#e3e9e6]"],
+  [class~="border-[#e4e9e7]"], [class~="border-[#edf0ef]"], [class~="border-[#d8e4df]"],
+  [class~="border-[#d8e2de]"], [class~="border-[#dbe4e0]"], [class~="border-[#dbe6e2]"]
+) {
+  border-color: var(--ngg-border);
+}
+
+:is(
+  [class~="border-[#b9cbc6]"], [class~="border-[#cddbd7]"], [class~="border-[#ceddd8]"],
+  [class~="border-[#b8d2ca]"], [class~="border-[#9db7b0]"], [class~="border-[#8ba9a1]"],
+  [class~="border-[#8da7a0]"]
+) {
+  border-color: var(--ngg-border-strong);
+}
+
+:is(
+  [class~="bg-[#edf4f1]"], [class~="bg-[#edf3f0]"], [class~="bg-[#edf5f1]"],
+  [class~="bg-[#dfece7]"], [class~="bg-[#f1f6f3]"]
+) {
+  background-color: var(--ngg-accent-soft);
+}
+
+:is(
+  [class~="bg-[#f5f7f6]"], [class~="bg-[#f7f9f8]"], [class~="bg-[#edf2ef]"],
+  [class~="bg-[#f4f7f5]"], [class~="bg-[#f2f4f3]"], [class~="bg-[#f4f7f4]"],
+  [class~="bg-[#f7faf8]"], [class~="bg-[#fbfcfb]"]
+) {
+  background-color: #f7f7f8;
+}
+
+:is([class~="bg-[#f2f5f1]"], [class~="bg-[#f3f5f2]"]) {
+  background-color: var(--ngg-canvas);
+}
+
+:is([class~="focus:ring-[#77aa9d]"]):focus,
+:is([class~="focus-visible:ring-[#9fc4ba]"]):focus-visible {
+  --tw-ring-color: #f7b3d6;
+}
+
+.rounded-3xl,
+[class~="rounded-[2rem]"] {
+  border-radius: 0.75rem;
+}
+
+.rounded-2xl,
+.rounded-xl {
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

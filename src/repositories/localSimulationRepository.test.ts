@@ -1,0 +1,73 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest'
+import { DEMO_PUBLISHED_TOKEN } from '../data/demoData'
+import { getParticipantSimulationByToken, startParticipantSession } from '../services/participantSimulationService'
+import { resetDemoStorage, simulationRepository } from './localSimulationRepository'
+
+describe('localSimulationRepository', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetDemoStorage()
+  })
+
+  it('returns a strictly reduced participant view without internal data', () => {
+    const result = getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)
+    expect(result.state).toBe('available')
+    if (result.state !== 'available') return
+
+    expect(result.simulation.title).toBe('שיחת משוב עם עובד מתנגד')
+    expect(result.simulation).not.toHaveProperty('behavior')
+    expect(result.simulation).not.toHaveProperty('learningObjectives')
+    expect(result.simulation).not.toHaveProperty('facilitatorConfiguration')
+    expect(result.simulation).not.toHaveProperty('scenario.hiddenInfo')
+    expect(result.simulation.character).toEqual({ name: 'נועם לוי', role: 'מפתח בכיר' })
+  })
+
+  it('publishes a valid draft with an unpredictable token and public link', () => {
+    const draft = simulationRepository.create()
+    const updated = simulationRepository.update(draft.id, {
+      title: 'בדיקת פרסום',
+      scenario: { ...draft.scenario, description: 'שיחה על פער בביצועים' },
+      character: { ...draft.character, name: 'דמות בדיקה' },
+      participantBrief: {
+        ...draft.participantBrief,
+        title: 'תדריך לבדיקה',
+        shortDescription: 'תיאור קצר וממוקד',
+        participantRole: 'מנהל/ת',
+        conversationGoal: 'להגיע להסכמה',
+      },
+    })
+    const published = simulationRepository.publish(updated.id)
+
+    expect(published.status).toBe('published')
+    expect(published.publicToken).toMatch(/^[a-z0-9]{20,}$/)
+    expect(published.shareLink?.url).toContain(`/simulation/${published.publicToken}`)
+    expect(getParticipantSimulationByToken(published.publicToken!).state).toBe('available')
+  })
+
+  it('revokes the old public token when publication is cancelled', () => {
+    const demo = simulationRepository.list().find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
+    simulationRepository.unpublish(demo.id)
+    expect(getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'unpublished' })
+  })
+
+  it('saves and completes a demo session', () => {
+    const session = startParticipantSession(DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקת משתמש' })
+    const completed = simulationRepository.completeSession(session.id, 73, [
+      { id: 'entry-1', speaker: 'participant', text: 'שלום', timestampSeconds: 3 },
+    ])
+
+    expect(completed.status).toBe('completed')
+    expect(completed.durationSeconds).toBe(73)
+    expect(simulationRepository.getReport(session.id)?.scores).toBeDefined()
+  })
+
+  it('marks replaced and deleted tokens with a friendly reason', () => {
+    const demo = simulationRepository.list().find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
+    const regenerated = simulationRepository.regeneratePublicToken(demo.id)
+    expect(getParticipantSimulationByToken(DEMO_PUBLISHED_TOKEN)).toEqual({ state: 'unavailable', reason: 'replaced' })
+
+    simulationRepository.remove(regenerated.id)
+    expect(getParticipantSimulationByToken(regenerated.publicToken!)).toEqual({ state: 'unavailable', reason: 'deleted' })
+  })
+})
