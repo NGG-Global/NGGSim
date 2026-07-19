@@ -62,6 +62,26 @@ describe('localSimulationRepository', () => {
     expect((await simulationRepository.getReport(session.id))?.scores).toBeDefined()
   })
 
+  it('collapses duplicate session starts that share an idempotency key', async () => {
+    const key = 'attempt-abc123def456'
+    const first = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' }, key)
+    const countAfterFirst = (await simulationRepository.listSessions(first.simulationId)).length
+
+    const second = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' }, key)
+    expect(second.id).toBe(first.id)
+    expect((await simulationRepository.listSessions(first.simulationId)).length).toBe(countAfterFirst)
+
+    const fresh = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' }, 'different-xyz789012')
+    expect(fresh.id).not.toBe(first.id)
+    expect((await simulationRepository.listSessions(first.simulationId)).length).toBe(countAfterFirst + 1)
+  })
+
+  it('creates a distinct attempt for each start when no idempotency key is supplied', async () => {
+    const first = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' })
+    const second = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' })
+    expect(second.id).not.toBe(first.id)
+  })
+
   it('marks replaced and deleted tokens with a friendly reason', async () => {
     const demo = (await simulationRepository.list()).find((simulation) => simulation.publicToken === DEMO_PUBLISHED_TOKEN)!
     const regenerated = await simulationRepository.regeneratePublicToken(demo.id)

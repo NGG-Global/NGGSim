@@ -16,6 +16,7 @@ const SIMULATIONS_KEY = 'simulab.simulations.v1'
 const SESSIONS_KEY = 'simulab.sessions.v1'
 const REPORTS_KEY = 'simulab.reports.v1'
 const REVOKED_KEY = 'simulab.revoked-links.v1'
+const SESSION_IDEMPOTENCY_KEY = 'simulab.session-idempotency.v1'
 export const STORAGE_CHANGED_EVENT = 'simulab:storage-changed'
 
 interface RevokedLink {
@@ -203,12 +204,22 @@ export class LocalSimulationRepository implements SimulationRepository {
     return { state: 'unavailable', reason: revoked[normalizedToken]?.reason ?? 'not_found' }
   }
 
-  async createSession(token: string, details: Record<string, string>): Promise<SimulationSession> {
+  async createSession(token: string, details: Record<string, string>, idempotencyKey?: string): Promise<SimulationSession> {
     const simulation = (await this.list()).find((item) => item.publicToken === token)
     if (!simulation || simulation.status !== 'published') {
       throw new Error('לא ניתן להתחיל את הסימולציה מהקישור הזה.')
     }
     const simulationId = simulation.id
+    // Idempotent replay: a repeated submission with the same key returns the
+    // original attempt rather than creating a duplicate, matching the server RPC.
+    if (idempotencyKey) {
+      const map = readJson<Record<string, string>>(SESSION_IDEMPOTENCY_KEY, {})
+      const existingId = map[`${token}::${idempotencyKey}`]
+      if (existingId) {
+        const existing = await this.getSession(existingId)
+        if (existing) return existing
+      }
+    }
     const session: SimulationSession = {
       id: uid('session'),
       simulationId,
@@ -229,6 +240,11 @@ export class LocalSimulationRepository implements SimulationRepository {
     const sessions = readJson<SimulationSession[]>(SESSIONS_KEY, [])
     sessions.unshift(session)
     writeJson(SESSIONS_KEY, sessions)
+    if (idempotencyKey) {
+      const map = readJson<Record<string, string>>(SESSION_IDEMPOTENCY_KEY, {})
+      map[`${token}::${idempotencyKey}`] = session.id
+      writeJson(SESSION_IDEMPOTENCY_KEY, map)
+    }
     notify()
     return clone(session)
   }

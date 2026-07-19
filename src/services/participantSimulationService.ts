@@ -12,6 +12,7 @@ export function startParticipantSession(
   repository: SimulationRepository,
   publicToken: string,
   details: Record<string, string>,
+  idempotencyKey?: string,
 ): Promise<SimulationSession> {
-  return repository.createSession(publicToken, details)
+  return repository.createSession(publicToken, details, idempotencyKey)
 }
