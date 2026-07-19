@@ -75,7 +75,8 @@ create table public.simulation_share_links (
     references public.simulations (id, owner_id)
     on delete restrict,
   constraint simulation_share_links_status_check check (status in ('active', 'revoked', 'expired')),
-  constraint simulation_share_links_token_format check (token ~ '^[A-Za-z0-9_-]{32,256}$'),
+  constraint simulation_share_links_token_format
+    check (char_length(token) between 32 and 256 and token ~ '^[A-Za-z0-9_-]+$'),
   constraint simulation_share_links_expiry_check check (expires_at is null or expires_at > created_at),
   constraint simulation_share_links_revocation_check check (
     (status = 'active' and revoked_at is null)
