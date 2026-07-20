@@ -31,6 +31,7 @@ export interface Character {
   conditionalInfo: string
   speakingStyle: string
   avoidedBehaviors: string
+  voiceGender: 'female' | 'male'
 }
 
 export interface CharacterBehavior {

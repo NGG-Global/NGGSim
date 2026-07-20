@@ -65,6 +65,7 @@ export function createBlankSimulation(id: string): Simulation {
       conditionalInfo: '',
       speakingStyle: '',
       avoidedBehaviors: '',
+      voiceGender: 'female',
     },
     behavior: {
       difficulty: 'בינוני',
