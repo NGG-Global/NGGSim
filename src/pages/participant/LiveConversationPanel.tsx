@@ -130,8 +130,9 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
     setError('')
     setStarting(true)
     try {
-      const signedUrl = await repository.requestVoiceSignedUrl(session.id)
-      conversation.startSession({ signedUrl })
+      const { signedUrl, overrides } = await repository.requestVoiceSignedUrl(session.id)
+      const sessionConfig = { signedUrl, ...(overrides ? { overrides } : {}) }
+      conversation.startSession(sessionConfig as Parameters<typeof conversation.startSession>[0])
       setStarted(true)
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : 'לא הצלחנו להתחיל את השיחה הקולית. נסו שוב.')

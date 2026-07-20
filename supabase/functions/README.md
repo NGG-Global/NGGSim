@@ -16,10 +16,12 @@ Set under Dashboard → **Edge Functions** → **Secrets**:
 
 | Secret | Purpose |
 |---|---|
-| `ELEVENLABS_API_KEY` | ElevenLabs key, ElevenAgents **Read** scope. Server-side only. |
+| `ELEVENLABS_API_KEY` | ElevenLabs key, ElevenAgents **Read + Write** scope (write is required to mint a signed URL). Server-side only. |
 | `ELEVENLABS_AGENT_ID` | The base agent id (`agent_…`). |
+| `ELEVENLABS_VOICE_MALE` | Optional. ElevenLabs voice id used when the character's voice is male. |
+| `ELEVENLABS_VOICE_FEMALE` | Optional. ElevenLabs voice id used when the character's voice is female. |
 
-`SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically — do not add them.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically — do not add them. The service-role key is used only to read the full simulation server-side when building the character overrides.
 
 ## Functions
 
