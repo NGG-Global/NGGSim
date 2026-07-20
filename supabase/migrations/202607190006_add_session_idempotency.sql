@@ -39,8 +39,10 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_simulation public.simulations%rowtype;
-  v_share_link public.simulation_share_links%rowtype;
+  v_simulation_id uuid;
+  v_simulation_owner_id uuid;
+  v_participant_fields jsonb;
+  v_share_link_id uuid;
   v_participant_id uuid;
   v_session_id uuid;
   v_filtered_details jsonb;
@@ -58,8 +60,9 @@ begin
     return null;
   end if;
 
-  select simulation, share_link
-  into v_simulation, v_share_link
+  -- Scalar targets only: PL/pgSQL forbids a row variable in a multi-item INTO list.
+  select simulation.id, simulation.owner_id, simulation.participant_fields, share_link.id
+  into v_simulation_id, v_simulation_owner_id, v_participant_fields, v_share_link_id
   from public.simulation_share_links as share_link
   join public.simulations as simulation
     on simulation.id = share_link.simulation_id and simulation.owner_id = share_link.owner_id
@@ -72,7 +75,7 @@ begin
   limit 1
   for share of simulation, share_link;
 
-  if v_simulation.id is null then return null; end if;
+  if v_simulation_id is null then return null; end if;
 
   -- Idempotent replay: a repeated submission with the same key returns the
   -- original attempt with a freshly minted capability instead of creating a
@@ -81,7 +84,7 @@ begin
   if p_idempotency_key is not null then
     select id into v_session_id
     from public.simulation_sessions
-    where share_link_id = v_share_link.id
+    where share_link_id = v_share_link_id
       and idempotency_key = p_idempotency_key
     limit 1;
 
@@ -102,14 +105,14 @@ begin
   from jsonb_each_text(p_details) as detail
   where exists (
     select 1
-    from jsonb_array_elements(v_simulation.participant_fields) as field
+    from jsonb_array_elements(v_participant_fields) as field
     where field ->> 'enabled' = 'true' and field ->> 'type' = detail.key
   );
 
   insert into public.participants (
     simulation_id, owner_id, details, consented_at, consent_version
   ) values (
-    v_simulation.id, v_simulation.owner_id, v_filtered_details, now(), p_consent_version
+    v_simulation_id, v_simulation_owner_id, v_filtered_details, now(), p_consent_version
   ) returning id into v_participant_id;
 
   v_access_token := encode(extensions.gen_random_bytes(32), 'hex');
@@ -119,7 +122,7 @@ begin
       simulation_id, share_link_id, participant_id, owner_id, status,
       started_at, conversation_state, access_token_hash, idempotency_key
     ) values (
-      v_simulation.id, v_share_link.id, v_participant_id, v_simulation.owner_id,
+      v_simulation_id, v_share_link_id, v_participant_id, v_simulation_owner_id,
       'in_progress', now(), 'listening',
       encode(extensions.digest(v_access_token, 'sha256'), 'hex'), p_idempotency_key
     ) returning id into v_session_id;
@@ -130,7 +133,7 @@ begin
     -- not this function, is responsible for reclaiming orphaned records.
     select id into v_session_id
     from public.simulation_sessions
-    where share_link_id = v_share_link.id
+    where share_link_id = v_share_link_id
       and idempotency_key = p_idempotency_key
     limit 1;
     if v_session_id is null then raise; end if;

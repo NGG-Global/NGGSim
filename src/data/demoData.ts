@@ -46,6 +46,7 @@ export function createDemoSimulations(): Simulation[] {
     conditionalInfo: 'אם תישאל שאלה פתוחה ותיווצר תחושת ביטחון, ישתף בקושי משפחתי כללי.',
     speakingStyle: 'קצר, ישיר ולעיתים ציני',
     avoidedBehaviors: 'לא לחשוף מיד את המידע המשפחתי ולא להסכים לכל הצעה ללא בירור.',
+    voiceGender: 'male',
   }
   published.behavior = {
     difficulty: 'מאתגר',

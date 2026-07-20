@@ -62,6 +62,19 @@ describe('localSimulationRepository', () => {
     expect((await simulationRepository.getReport(session.id))?.scores).toBeDefined()
   })
 
+  it('persists the character voice selection through create, update and reload', async () => {
+    const draft = await simulationRepository.create()
+    expect(draft.character.voiceGender).toBe('female')
+
+    const updated = await simulationRepository.update(draft.id, {
+      character: { ...draft.character, voiceGender: 'male' },
+    })
+    expect(updated.character.voiceGender).toBe('male')
+
+    const reloaded = await simulationRepository.getById(draft.id)
+    expect(reloaded?.character.voiceGender).toBe('male')
+  })
+
   it('collapses duplicate session starts that share an idempotency key', async () => {
     const key = 'attempt-abc123def456'
     const first = await startParticipantSession(simulationRepository, DEMO_PUBLISHED_TOKEN, { fullName: 'בדיקה' }, key)
