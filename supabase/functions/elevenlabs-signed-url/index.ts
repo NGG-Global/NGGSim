@@ -65,7 +65,11 @@ Deno.serve(async (req: Request) => {
     },
     body: JSON.stringify({ p_session_id: sessionId, p_access_token: accessToken }),
   })
-  if (!rpcResponse.ok) return json({ error: 'session_check_failed' }, 502)
+  if (!rpcResponse.ok) {
+    const body = await rpcResponse.text().catch(() => '')
+    console.error('session check RPC failed', rpcResponse.status, body.slice(0, 300))
+    return json({ error: 'session_check_failed', detail: rpcResponse.status }, 502)
+  }
   const session = await rpcResponse.json()
   if (!session) return json({ error: 'invalid_session' }, 403)
 
@@ -74,11 +78,18 @@ Deno.serve(async (req: Request) => {
     `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(ELEVENLABS_AGENT_ID)}`,
     { headers: { 'xi-api-key': ELEVENLABS_API_KEY } },
   )
-  if (!signedResponse.ok) return json({ error: 'provider_error' }, 502)
+  if (!signedResponse.ok) {
+    const body = await signedResponse.text().catch(() => '')
+    console.error('ElevenLabs get-signed-url failed', signedResponse.status, body.slice(0, 500))
+    return json({ error: 'provider_error', detail: signedResponse.status }, 502)
+  }
 
   const data = await signedResponse.json().catch(() => null)
   const signedUrl = data && typeof data.signed_url === 'string' ? data.signed_url : null
-  if (!signedUrl) return json({ error: 'provider_error' }, 502)
+  if (!signedUrl) {
+    console.error('ElevenLabs response missing signed_url')
+    return json({ error: 'provider_error', detail: 'no_signed_url' }, 502)
+  }
 
   return json({ signedUrl })
 })

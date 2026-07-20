@@ -241,7 +241,10 @@ export class SupabaseSimulationRepository implements SimulationRepository {
       throw new RepositoryError('לא הצלחנו להתחבר לשירות השיחה הקולית. בדקו את החיבור לרשת.', 'unknown')
     }
     if (!response.ok) {
-      throw new RepositoryError('לא הצלחנו להתחיל את השיחה הקולית. נסו שוב או פנו למנחה.', 'unknown')
+      const info = (await response.json().catch(() => null)) as { error?: unknown; detail?: unknown } | null
+      const code = info && typeof info.error === 'string' ? info.error : `HTTP ${response.status}`
+      const detail = info && (typeof info.detail === 'string' || typeof info.detail === 'number') ? ` ${info.detail}` : ''
+      throw new RepositoryError(`לא הצלחנו להתחיל את השיחה הקולית (${code}${detail}). נסו שוב או פנו למנחה.`, 'unknown')
     }
     const data = (await response.json().catch(() => null)) as { signedUrl?: unknown } | null
     if (!data || typeof data.signedUrl !== 'string' || !data.signedUrl) {
