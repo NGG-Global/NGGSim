@@ -7,6 +7,7 @@ import type {
   SimulationRepository,
   SimulationSession,
   TranscriptEntry,
+  VoiceSessionConfig,
 } from '../types/simulation'
 import { supabaseConfiguration } from '../services/supabaseClient'
 import { RepositoryError, toRepositoryError } from './repositoryErrors'
@@ -221,7 +222,7 @@ export class SupabaseSimulationRepository implements SimulationRepository {
     return session
   }
 
-  async requestVoiceSignedUrl(sessionId: string): Promise<string> {
+  async requestVoiceSignedUrl(sessionId: string): Promise<VoiceSessionConfig> {
     this.requireClient()
     if (!this.supabaseUrl) {
       throw new RepositoryError('כתובת Supabase הציבורית אינה מוגדרת, ולכן לא ניתן להתחיל שיחה קולית.', 'configuration')
@@ -246,11 +247,11 @@ export class SupabaseSimulationRepository implements SimulationRepository {
       const detail = info && (typeof info.detail === 'string' || typeof info.detail === 'number') ? ` ${info.detail}` : ''
       throw new RepositoryError(`לא הצלחנו להתחיל את השיחה הקולית (${code}${detail}). נסו שוב או פנו למנחה.`, 'unknown')
     }
-    const data = (await response.json().catch(() => null)) as { signedUrl?: unknown } | null
+    const data = (await response.json().catch(() => null)) as { signedUrl?: unknown; overrides?: unknown } | null
     if (!data || typeof data.signedUrl !== 'string' || !data.signedUrl) {
       throw new RepositoryError('השרת לא החזיר כתובת שיחה תקפה.', 'unknown')
     }
-    return data.signedUrl
+    return { signedUrl: data.signedUrl, overrides: data.overrides }
   }
 
   async getSession(id: string): Promise<SimulationSession | null> {

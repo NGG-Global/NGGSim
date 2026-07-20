@@ -8,6 +8,7 @@ import type {
   SimulationRepository,
   SimulationSession,
   TranscriptEntry,
+  VoiceSessionConfig,
 } from '../types/simulation'
 import { toParticipantSimulationView } from '../services/participantSimulationMapper'
 import { validatePublishable } from './simulationValidation'
@@ -249,7 +250,7 @@ export class LocalSimulationRepository implements SimulationRepository {
     return clone(session)
   }
 
-  async requestVoiceSignedUrl(): Promise<string> {
+  async requestVoiceSignedUrl(): Promise<VoiceSessionConfig> {
     throw new Error('שיחה קולית אינה זמינה בסביבת ההדגמה המקומית. יש להשתמש בספק Supabase.')
   }
 

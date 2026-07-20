@@ -180,6 +180,12 @@ export type PublicSimulationResult =
   | { state: 'available'; simulation: ParticipantSimulationView }
   | { state: 'unavailable'; reason: PublicUnavailableReason }
 
+/** Result of requesting a live voice session: the signed URL and optional server-built agent overrides. */
+export interface VoiceSessionConfig {
+  signedUrl: string
+  overrides?: unknown
+}
+
 export interface SimulationRepository {
   readonly provider: 'local' | 'supabase'
   list(): Promise<Simulation[]>
@@ -193,8 +199,8 @@ export interface SimulationRepository {
   remove(id: string): Promise<void>
   lookupPublicToken(token: string): Promise<PublicSimulationResult>
   createSession(token: string, details: Record<string, string>, idempotencyKey?: string): Promise<SimulationSession>
-  /** Returns a short-lived ElevenLabs signed WebSocket URL for an active session. */
-  requestVoiceSignedUrl(sessionId: string): Promise<string>
+  /** Returns the ElevenLabs signed WebSocket URL plus server-built character overrides for an active session. */
+  requestVoiceSignedUrl(sessionId: string): Promise<VoiceSessionConfig>
   getSession(id: string): Promise<SimulationSession | null>
   listSessions(simulationId: string): Promise<SimulationSession[]>
   updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession>
