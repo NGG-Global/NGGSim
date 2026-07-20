@@ -249,6 +249,10 @@ export class LocalSimulationRepository implements SimulationRepository {
     return clone(session)
   }
 
+  async requestVoiceSignedUrl(): Promise<string> {
+    throw new Error('שיחה קולית אינה זמינה בסביבת ההדגמה המקומית. יש להשתמש בספק Supabase.')
+  }
+
   async getSession(id: string): Promise<SimulationSession | null> {
     return clone(readJson<SimulationSession[]>(SESSIONS_KEY, []).find((session) => session.id === id) ?? null)
   }

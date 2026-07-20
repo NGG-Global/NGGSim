@@ -8,6 +8,7 @@ import type {
   SimulationSession,
   TranscriptEntry,
 } from '../types/simulation'
+import { supabaseConfiguration } from '../services/supabaseClient'
 import { RepositoryError, toRepositoryError } from './repositoryErrors'
 import { validatePublishable } from './simulationValidation'
 import {
@@ -45,6 +46,7 @@ export class SupabaseSimulationRepository implements SimulationRepository {
   constructor(
     private readonly client: SupabaseClient | null,
     private readonly baseUrl = currentBaseUrl(),
+    private readonly supabaseUrl: string | null = supabaseConfiguration.url,
   ) {}
 
   async list(): Promise<Simulation[]> {
@@ -217,6 +219,35 @@ export class SupabaseSimulationRepository implements SimulationRepository {
     const session = mapSessionRow(payload.session)
     this.writeSessionAccessToken(session.id, payload.accessToken)
     return session
+  }
+
+  async requestVoiceSignedUrl(sessionId: string): Promise<string> {
+    this.requireClient()
+    if (!this.supabaseUrl) {
+      throw new RepositoryError('כתובת Supabase הציבורית אינה מוגדרת, ולכן לא ניתן להתחיל שיחה קולית.', 'configuration')
+    }
+    const accessToken = this.readSessionAccessToken(sessionId)
+    if (!accessToken) {
+      throw new RepositoryError('לא נמצאה הרשאת שיחה תקפה. התחילו את הסימולציה מהקישור מחדש.', 'forbidden')
+    }
+    let response: Response
+    try {
+      response = await fetch(`${this.supabaseUrl.replace(/\/$/, '')}/functions/v1/elevenlabs-signed-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, accessToken }),
+      })
+    } catch {
+      throw new RepositoryError('לא הצלחנו להתחבר לשירות השיחה הקולית. בדקו את החיבור לרשת.', 'unknown')
+    }
+    if (!response.ok) {
+      throw new RepositoryError('לא הצלחנו להתחיל את השיחה הקולית. נסו שוב או פנו למנחה.', 'unknown')
+    }
+    const data = (await response.json().catch(() => null)) as { signedUrl?: unknown } | null
+    if (!data || typeof data.signedUrl !== 'string' || !data.signedUrl) {
+      throw new RepositoryError('השרת לא החזיר כתובת שיחה תקפה.', 'unknown')
+    }
+    return data.signedUrl
   }
 
   async getSession(id: string): Promise<SimulationSession | null> {

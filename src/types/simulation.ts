@@ -193,6 +193,8 @@ export interface SimulationRepository {
   remove(id: string): Promise<void>
   lookupPublicToken(token: string): Promise<PublicSimulationResult>
   createSession(token: string, details: Record<string, string>, idempotencyKey?: string): Promise<SimulationSession>
+  /** Returns a short-lived ElevenLabs signed WebSocket URL for an active session. */
+  requestVoiceSignedUrl(sessionId: string): Promise<string>
   getSession(id: string): Promise<SimulationSession | null>
   listSessions(simulationId: string): Promise<SimulationSession[]>
   updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession>
