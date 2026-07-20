@@ -21,7 +21,7 @@ interface FakeAuthClient {
   client: AuthClient
   getSession: ReturnType<typeof vi.fn>
   getClaims: ReturnType<typeof vi.fn>
-  signInWithOtp: ReturnType<typeof vi.fn>
+  signInWithPassword: ReturnType<typeof vi.fn>
   signOut: ReturnType<typeof vi.fn>
   emit: (event: AuthChangeEvent, session: Session | null) => void
 }
@@ -57,7 +57,11 @@ function createFakeAuthClient(initialSession: Session | null, holdInitialCheck =
   const getClaims = vi.fn(() => holdClaimsCheck
     ? new Promise<never>(() => undefined)
     : Promise.resolve({ data: { claims: { sub: session?.user.id } }, error: null }))
-  const signInWithOtp = vi.fn(async () => ({ data: { user: null, session: null }, error: null }))
+  const signInWithPassword = vi.fn(async () => {
+    session = createSession()
+    listeners.forEach((listener) => listener('SIGNED_IN', session))
+    return { data: { session, user: session.user }, error: null }
+  })
   const signOut = vi.fn(async () => {
     session = null
     listeners.forEach((listener) => listener('SIGNED_OUT', null))
@@ -68,7 +72,7 @@ function createFakeAuthClient(initialSession: Session | null, holdInitialCheck =
     auth: {
       getSession,
       getClaims,
-      signInWithOtp,
+      signInWithPassword,
       signOut,
       onAuthStateChange: vi.fn((listener: (event: AuthChangeEvent, session: Session | null) => void) => {
         listeners.add(listener)
@@ -89,7 +93,7 @@ function createFakeAuthClient(initialSession: Session | null, holdInitialCheck =
     client,
     getSession,
     getClaims,
-    signInWithOtp,
+    signInWithPassword,
     signOut,
     emit: (event, nextSession) => {
       session = nextSession
@@ -189,7 +193,7 @@ describe('Supabase facilitator auth flow', () => {
 
     await act(async () => fake.emit('SIGNED_OUT', null))
     await waitForText(container, 'פג תוקף ההתחברות')
-    expect(container.textContent).toContain('לבקש קישור חדש')
+    expect(container.textContent).toContain('להתחבר מחדש')
   })
 
   it('keeps the participant link public while auth is still being checked', async () => {
@@ -215,19 +219,23 @@ describe('Supabase facilitator auth flow', () => {
     expect(fake.getClaims).toHaveBeenCalledTimes(2)
   })
 
-  it('sends an invitation-only magic link with the protected destination', async () => {
+  it('signs in with email and password and enters the requested admin route', async () => {
     const fake = createFakeAuthClient(null)
-    const { container } = await renderPath('/login?returnTo=%2Fadmin%2Fsimulations%2Fnew', fake.client)
+    const { container } = await renderPath('/login?returnTo=%2Fadmin', fake.client)
     await waitForText(container, 'כניסה למרחב המנחים')
 
     const emailInput = container.querySelector<HTMLInputElement>('input[type="email"]')
+    const passwordInput = container.querySelector<HTMLInputElement>('input[type="password"]')
     const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
     expect(emailInput).not.toBeNull()
+    expect(passwordInput).not.toBeNull()
     expect(inputSetter).toBeDefined()
 
     await act(async () => {
       inputSetter?.call(emailInput, 'facilitator@example.test')
       emailInput?.dispatchEvent(new Event('input', { bubbles: true }))
+      inputSetter?.call(passwordInput, 'pilot-password')
+      passwordInput?.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
     const form = container.querySelector('form')
@@ -236,13 +244,10 @@ describe('Supabase facilitator auth flow', () => {
       await Promise.resolve()
     })
 
-    await waitForText(container, 'הקישור נשלח')
-    expect(fake.signInWithOtp).toHaveBeenCalledWith({
+    await waitForText(container, 'סימולציות ניהוליות')
+    expect(fake.signInWithPassword).toHaveBeenCalledWith({
       email: 'facilitator@example.test',
-      options: {
-        emailRedirectTo: expect.stringContaining('/auth/callback?returnTo=%2Fadmin%2Fsimulations%2Fnew'),
-        shouldCreateUser: false,
-      },
+      password: 'pilot-password',
     })
   })
 
