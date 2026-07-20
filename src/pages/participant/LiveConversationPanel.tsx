@@ -1,4 +1,4 @@
-import { useConversation } from '@elevenlabs/react'
+import { ConversationProvider, useConversation } from '@elevenlabs/react'
 import { CircleStop, Loader2, Mic, Volume2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -13,17 +13,26 @@ interface Props {
   publicToken: string
 }
 
-type Phase = 'idle' | 'starting' | 'active' | 'ending'
+/** useConversation must live inside a ConversationProvider, so wrap here. */
+export function LiveConversationPanel(props: Props) {
+  return (
+    <ConversationProvider>
+      <LiveConversationInner {...props} />
+    </ConversationProvider>
+  )
+}
 
 /**
  * Live voice conversation via ElevenLabs. The browser connects with a short-lived
  * signed URL minted server-side; the per-simulation character is injected by the
  * server (initiation webhook), never from here, so hidden info stays off the client.
  */
-export function LiveConversationPanel({ session, simulation, publicToken }: Props) {
+function LiveConversationInner({ session, simulation, publicToken }: Props) {
   const navigate = useNavigate()
   const repository = useSimulationRepository()
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [started, setStarted] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [ending, setEnding] = useState(false)
   const [error, setError] = useState('')
   const [elapsed, setElapsed] = useState(session.durationSeconds)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>(session.transcript)
@@ -32,11 +41,15 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
   const lastPersistedState = useRef<ConversationState | null>(null)
 
   const conversation = useConversation({
-    onError: (err: unknown) => {
-      setError(typeof err === 'string' && err ? err : 'אירעה שגיאה בשיחה הקולית.')
+    onError: (message: unknown) => {
+      const text = typeof message === 'string' ? message : ''
+      setError(/permission|denied|microphone|not\s?allowed|getusermedia|audio/i.test(text)
+        ? 'כדי לדבר עם הדמות יש לאשר גישה למיקרופון בדפדפן ולנסות שוב.'
+        : (text || 'אירעה שגיאה בשיחה הקולית. נסו שוב.'))
+      setStarted(false)
     },
-    onMessage: (props: unknown) => {
-      const data = props as { message?: unknown; source?: unknown }
+    onMessage: (payload: unknown) => {
+      const data = payload as { message?: unknown; source?: unknown }
       if (typeof data.message !== 'string' || !data.message.trim()) return
       const speaker: TranscriptEntry['speaker'] = data.source === 'user' ? 'participant' : 'character'
       const entry: TranscriptEntry = {
@@ -51,13 +64,13 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
   })
 
   const isConnected = conversation.status === 'connected'
-  const conversationState: ConversationState = phase === 'active' && isConnected
+  const conversationState: ConversationState = isConnected
     ? (conversation.isSpeaking ? 'speaking' : 'listening')
     : 'thinking'
 
-  // Timer while the call is active; persist duration every few seconds.
+  // Timer while a call is running; persist duration every few seconds.
   useEffect(() => {
-    if (phase !== 'active') return
+    if (!started) return
     const interval = window.setInterval(() => {
       setElapsed((value) => {
         const next = value + 1
@@ -69,53 +82,54 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
       })
     }, 1000)
     return () => window.clearInterval(interval)
-  }, [phase, repository, session.id])
+  }, [started, repository, session.id])
 
   // Persist the conversation state (listening/speaking) when it changes.
   useEffect(() => {
-    if (phase !== 'active') return
+    if (!started || !isConnected) return
     if (lastPersistedState.current === conversationState) return
     lastPersistedState.current = conversationState
     repository.updateSessionProgress(session.id, { conversationState }).catch(() => undefined)
-  }, [conversationState, phase, repository, session.id])
+  }, [conversationState, isConnected, started, repository, session.id])
 
   // Hang up if the participant leaves the screen mid-call.
   useEffect(() => {
     return () => {
-      void Promise.resolve(conversation.endSession()).catch(() => undefined)
+      try { conversation.endSession() } catch { /* ignore */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const start = async () => {
     setError('')
-    setPhase('starting')
+    setStarting(true)
     try {
       const signedUrl = await repository.requestVoiceSignedUrl(session.id)
-      await conversation.startSession({ signedUrl })
-      setPhase('active')
+      conversation.startSession({ signedUrl })
+      setStarted(true)
     } catch (startError) {
-      const message = startError instanceof Error ? startError.message : ''
-      setError(/permission|denied|microphone|not\s?allowed|getusermedia/i.test(message)
-        ? 'כדי לדבר עם הדמות יש לאשר גישה למיקרופון בדפדפן ולנסות שוב.'
-        : (message || 'לא הצלחנו להתחיל את השיחה הקולית. נסו שוב.'))
-      setPhase('idle')
+      setError(startError instanceof Error ? startError.message : 'לא הצלחנו להתחיל את השיחה הקולית. נסו שוב.')
+    } finally {
+      setStarting(false)
     }
   }
 
   const finish = async () => {
-    if (phase === 'active' && !window.confirm('לסיים את הסימולציה? לאחר הסיום לא ניתן להמשיך את השיחה הזו.')) return
-    setPhase('ending')
+    if (started && isConnected && !window.confirm('לסיים את הסימולציה? לאחר הסיום לא ניתן להמשיך את השיחה הזו.')) return
+    setEnding(true)
     setError('')
     try {
-      await Promise.resolve(conversation.endSession()).catch(() => undefined)
+      try { conversation.endSession() } catch { /* ignore */ }
       await repository.completeSession(session.id, elapsedRef.current, transcriptRef.current)
       navigate(`/simulation/${publicToken}/complete?session=${session.id}`)
     } catch (finishError) {
       setError(finishError instanceof Error ? finishError.message : 'לא הצלחנו לסיים את הסימולציה.')
-      setPhase('active')
+      setEnding(false)
     }
   }
+
+  const connecting = started && conversation.status === 'connecting'
+  const active = started && (conversation.status === 'connected' || conversation.status === 'disconnected')
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -133,7 +147,7 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
               <span className="block text-xs font-bold text-[#6d817c]">זמן שחלף</span>
               <time className="mt-1 block font-mono text-2xl font-bold" dateTime={`PT${elapsed}S`}>{formatTimer(elapsed)}</time>
             </div>
-            {phase === 'active' && (
+            {active && (
               <div className={`conversation-status conversation-status-${conversationState}`} role="status" aria-live="polite">
                 {conversationState === 'speaking' && <Volume2 className="h-4 w-4" aria-hidden="true" />}
                 <span className="status-pulse" aria-hidden="true" /> {stateLabels[conversationState]}
@@ -142,7 +156,7 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
           </div>
 
           <div className="my-10 flex flex-col items-center">
-            {phase === 'idle' && (
+            {!started && !starting && (
               <>
                 <button type="button" onClick={start} aria-label="התחלת שיחה קולית" className="microphone-button">
                   <Mic className="h-10 w-10" aria-hidden="true" />
@@ -150,13 +164,13 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
                 <p className="mt-4 text-sm font-bold text-[#566f69]">לחצו כדי להתחיל לדבר. הדפדפן יבקש הרשאה למיקרופון.</p>
               </>
             )}
-            {phase === 'starting' && (
+            {(starting || connecting) && (
               <div className="flex flex-col items-center text-[#566f69]">
                 <Loader2 className="h-10 w-10 animate-spin" aria-hidden="true" />
                 <p className="mt-4 text-sm font-bold">מתחברים לדמות…</p>
               </div>
             )}
-            {phase === 'active' && (
+            {active && !connecting && (
               <div className="flex flex-col items-center">
                 <div className={`microphone-button ${conversation.isSpeaking ? 'microphone-button-busy' : ''}`} aria-hidden="true">
                   <Mic className="h-10 w-10" />
@@ -164,7 +178,7 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
                 <p className="mt-4 text-sm font-bold text-[#566f69]">דברו באופן טבעי — הדמות מקשיבה ומגיבה.</p>
               </div>
             )}
-            {phase === 'ending' && (
+            {ending && (
               <div className="flex flex-col items-center text-[#566f69]">
                 <Loader2 className="h-10 w-10 animate-spin" aria-hidden="true" />
                 <p className="mt-4 text-sm font-bold">מסיימים…</p>
@@ -180,9 +194,9 @@ export function LiveConversationPanel({ session, simulation, publicToken }: Prop
 
           {error && <p role="alert" className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-800">{error}</p>}
 
-          {phase !== 'idle' && (
+          {started && (
             <div className="flex justify-center">
-              <Button variant="danger" icon={<CircleStop className="h-4 w-4" />} onClick={finish} disabled={phase === 'ending' || phase === 'starting'}>סיום הסימולציה</Button>
+              <Button variant="danger" icon={<CircleStop className="h-4 w-4" />} onClick={finish} disabled={ending}>סיום הסימולציה</Button>
             </div>
           )}
         </div>
