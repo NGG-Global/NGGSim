@@ -39,6 +39,7 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
   const transcriptRef = useRef<TranscriptEntry[]>(session.transcript)
   const elapsedRef = useRef(session.durationSeconds)
   const lastPersistedState = useRef<ConversationState | null>(null)
+  const blobRef = useRef<HTMLDivElement>(null)
 
   const conversation = useConversation({
     onError: (message: unknown) => {
@@ -62,6 +63,10 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
       setTranscript(transcriptRef.current)
     },
   })
+
+  // Keep a live reference so the animation loop always reads the current audio getters.
+  const convRef = useRef(conversation)
+  convRef.current = conversation
 
   const isConnected = conversation.status === 'connected'
   const conversationState: ConversationState = isConnected
@@ -99,6 +104,27 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Drive the blob's scale from live microphone / agent volume, each frame.
+  useEffect(() => {
+    if (!started) return
+    let raf = 0
+    const tick = () => {
+      const c = convRef.current
+      let level = 0
+      try {
+        const inVol = typeof c.getInputVolume === 'function' ? c.getInputVolume() : 0
+        const outVol = typeof c.getOutputVolume === 'function' ? c.getOutputVolume() : 0
+        level = Math.min(1, Math.max(0, inVol, outVol))
+      } catch {
+        level = 0
+      }
+      if (blobRef.current) blobRef.current.style.setProperty('--level', level.toFixed(3))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [started])
 
   const start = async () => {
     setError('')
@@ -155,13 +181,13 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
             )}
           </div>
 
-          <div className="my-10 flex flex-col items-center">
+          <div className="my-10 flex min-h-[16rem] flex-col items-center justify-center">
             {!started && !starting && (
               <>
-                <button type="button" onClick={start} aria-label="התחלת שיחה קולית" className="microphone-button">
-                  <Mic className="h-10 w-10" aria-hidden="true" />
+                <button type="button" onClick={start} className="sim-start-button">
+                  <Mic className="h-6 w-6" aria-hidden="true" /> התחל סימולציה
                 </button>
-                <p className="mt-4 text-sm font-bold text-[#566f69]">לחצו כדי להתחיל לדבר. הדפדפן יבקש הרשאה למיקרופון.</p>
+                <p className="mt-4 text-sm font-bold text-[#566f69]">בלחיצה יתחיל התרגול והדפדפן יבקש הרשאה למיקרופון.</p>
               </>
             )}
             {(starting || connecting) && (
@@ -171,11 +197,11 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
               </div>
             )}
             {active && !connecting && (
-              <div className="flex flex-col items-center">
-                <div className={`microphone-button ${conversation.isSpeaking ? 'microphone-button-busy' : ''}`} aria-hidden="true">
-                  <Mic className="h-10 w-10" />
-                </div>
-                <p className="mt-4 text-sm font-bold text-[#566f69]">דברו באופן טבעי — הדמות מקשיבה ומגיבה.</p>
+              <div className="flex flex-col items-center gap-6">
+                <div ref={blobRef} className={`sim-blob ${conversation.isSpeaking ? 'sim-blob-speaking' : ''}`} aria-hidden="true" />
+                <p className="text-base font-bold text-[#566f69]" role="status" aria-live="polite">
+                  {conversation.isSpeaking ? 'הדמות מדברת…' : 'מדברים — הדמות מקשיבה 🎙️'}
+                </p>
               </div>
             )}
             {ending && (

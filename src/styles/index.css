@@ -145,6 +145,32 @@
   .microphone-button-busy {
     animation: microphone-breathe 1.3s ease-in-out infinite;
   }
+
+  .sim-start-button {
+    @apply inline-flex items-center gap-3 rounded-full bg-forest px-9 py-5 text-lg font-black text-white shadow-[0_10px_40px_rgba(236,42,140,0.4)] transition hover:bg-[#d11e78] focus-visible:outline-none focus-visible:ring-8 focus-visible:ring-[#f7b3d6];
+  }
+
+  /* Sound-reactive morphing blob. --level (0..1) is set from live mic/agent
+     volume each frame; the border-radius keyframes give the organic morph. */
+  .sim-blob {
+    width: 12rem;
+    height: 12rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 42% 58% 63% 37% / 42% 44% 56% 58%;
+    background: radial-gradient(circle at 32% 30%, #9ae6c9, #178a5f 72%);
+    box-shadow: 0 12px 44px rgba(23, 138, 95, 0.35);
+    transform: scale(calc(1 + var(--level, 0) * 0.5));
+    transition: transform 90ms linear, background 300ms ease, box-shadow 200ms ease;
+    animation: blob-morph 8s ease-in-out infinite;
+    will-change: transform, border-radius;
+  }
+
+  .sim-blob-speaking {
+    background: radial-gradient(circle at 32% 30%, #f7b3d6, #ec2a8c 72%);
+    box-shadow: 0 12px 52px rgba(236, 42, 140, 0.5);
+  }
 }
 
 @keyframes status-pulse {
@@ -155,6 +181,12 @@
 @keyframes microphone-breathe {
   0%, 100% { box-shadow: 0 0 0 0 rgba(236, 42, 140, 0.28), 0 6px 30px rgba(236, 42, 140, 0.42); }
   50% { box-shadow: 0 0 0 18px rgba(236, 42, 140, 0), 0 6px 30px rgba(236, 42, 140, 0.42); }
+}
+
+@keyframes blob-morph {
+  0%, 100% { border-radius: 42% 58% 63% 37% / 42% 44% 56% 58%; }
+  33% { border-radius: 60% 40% 42% 58% / 54% 46% 54% 46%; }
+  66% { border-radius: 40% 60% 54% 46% / 38% 58% 42% 62%; }
 }
 
 /*
