@@ -14,9 +14,11 @@ export function getFriendlyAuthError(error: SupabaseAuthErrorLike | null | undef
       return 'התחברות בקישור חד־פעמי אינה מופעלת כרגע. יש לפנות למנהל המערכת.'
     case 'otp_expired':
       return 'קישור ההתחברות פג או שכבר נעשה בו שימוש. בקשו קישור חדש.'
+    case 'email_not_confirmed':
+      return 'יש לאמת את כתובת האימייל לפני ההתחברות. פנו למנהל המערכת.'
     case 'access_denied':
     case 'invalid_credentials':
-      return 'לא ניתן להשלים את ההתחברות. ודאו שהכתובת הוזמנה למערכת ובקשו קישור חדש.'
+      return 'האימייל או הסיסמה שגויים, או שהכתובת אינה מורשית למערכת.'
     default:
       if (error.status === 429) return 'נשלחו יותר מדי בקשות. המתינו מעט ונסו שוב.'
       if (error.message?.toLowerCase().includes('fetch')) {

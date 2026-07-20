@@ -1,20 +1,20 @@
-import { ArrowLeft, CheckCircle2, KeyRound, Mail } from 'lucide-react'
+import { ArrowLeft, KeyRound, LogIn } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthLoadingScreen } from '../../auth/AuthLoadingScreen'
 import { useAuth } from '../../auth/AuthProvider'
-import { createAuthCallbackUrl, sanitizeAdminReturnTo } from '../../auth/redirects'
+import { sanitizeAdminReturnTo } from '../../auth/redirects'
 import { Button } from '../../components/ui/Button'
 import { TextField } from '../../components/ui/FormControls'
 
 export function LoginPage() {
-  const { status, notice, error: authError, isConfigured, configurationMessage, requestMagicLink, clearMessages } = useAuth()
+  const { status, notice, error: authError, isConfigured, configurationMessage, signInWithPassword, clearMessages } = useAuth()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const returnTo = useMemo(() => sanitizeAdminReturnTo(searchParams.get('returnTo')), [searchParams])
   const [email, setEmail] = useState('')
-  const [isSending, setIsSending] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,7 +28,6 @@ export function LoginPage() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFormError(null)
-    setSent(false)
     clearMessages()
 
     const normalizedEmail = email.trim().toLowerCase()
@@ -36,18 +35,20 @@ export function LoginPage() {
       setFormError('יש להזין כתובת אימייל.')
       return
     }
+    if (!password) {
+      setFormError('יש להזין סיסמה.')
+      return
+    }
 
-    setIsSending(true)
+    setIsSubmitting(true)
     try {
-      await requestMagicLink(
-        normalizedEmail,
-        createAuthCallbackUrl(window.location.origin, returnTo),
-      )
-      setSent(true)
-    } catch (requestError) {
-      setFormError(requestError instanceof Error ? requestError.message : 'לא הצלחנו לשלוח קישור התחברות.')
+      await signInWithPassword(normalizedEmail, password)
+      // On success the auth state change marks the session authenticated and the
+      // effect above redirects to the requested admin route.
+    } catch (signInError) {
+      setFormError(signInError instanceof Error ? signInError.message : 'לא הצלחנו להשלים את ההתחברות.')
     } finally {
-      setIsSending(false)
+      setIsSubmitting(false)
     }
   }
 
@@ -71,7 +72,7 @@ export function LoginPage() {
             <KeyRound className="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 id="login-title" className="mt-4 text-3xl font-black tracking-tight text-ink">כניסה למרחב המנחים</h1>
-          <p className="mt-3 leading-7 text-[#5a5a5c]">הזינו את כתובת האימייל שהוזמנה לפיילוט. נשלח אליה קישור חד־פעמי ומאובטח.</p>
+          <p className="mt-3 leading-7 text-[#5a5a5c]">הזינו את כתובת האימייל והסיסמה שהוקצו לכם לפיילוט.</p>
         </div>
 
         {!isConfigured && (
@@ -84,39 +85,43 @@ export function LoginPage() {
         {notice && <p role="status" className="mt-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">{notice}</p>}
         {visibleError && <p role="alert" className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-800">{visibleError}</p>}
 
-        {sent ? (
-          <div role="status" className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
-            <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
-            <h2 className="mt-3 font-bold">הקישור נשלח</h2>
-            <p className="mt-1 text-sm leading-6">אם הכתובת רשומה כמנחה, הודעת התחברות תגיע אליה בקרוב. אפשר לסגור את החלון לאחר פתיחת הקישור.</p>
-            <Button type="button" variant="secondary" className="mt-4" onClick={() => setSent(false)}>שליחת קישור נוסף</Button>
-          </div>
-        ) : (
-          <form className="mt-6" onSubmit={submit} noValidate>
-            <TextField
-              id="facilitator-email"
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              dir="ltr"
-              label="כתובת אימייל"
-              placeholder="name@organization.co.il"
-              required
-              value={email}
-              disabled={!isConfigured || isSending}
-              onChange={(event) => { setEmail(event.target.value); setFormError(null) }}
-            />
-            <Button
-              type="submit"
-              className="mt-5 w-full"
-              disabled={!isConfigured || isSending}
-              icon={isSending ? undefined : <Mail className="h-5 w-5" aria-hidden="true" />}
-            >
-              {isSending ? 'שולחים קישור…' : 'שליחת קישור התחברות'}
-            </Button>
-          </form>
-        )}
+        <form className="mt-6 space-y-4" onSubmit={submit} noValidate>
+          <TextField
+            id="facilitator-email"
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            dir="ltr"
+            label="כתובת אימייל"
+            placeholder="name@organization.co.il"
+            required
+            value={email}
+            disabled={!isConfigured || isSubmitting}
+            onChange={(event) => { setEmail(event.target.value); setFormError(null) }}
+          />
+          <TextField
+            id="facilitator-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            dir="ltr"
+            label="סיסמה"
+            placeholder="••••••••"
+            required
+            value={password}
+            disabled={!isConfigured || isSubmitting}
+            onChange={(event) => { setPassword(event.target.value); setFormError(null) }}
+          />
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!isConfigured || isSubmitting}
+            icon={isSubmitting ? undefined : <LogIn className="h-5 w-5" aria-hidden="true" />}
+          >
+            {isSubmitting ? 'מתחברים…' : 'כניסה'}
+          </Button>
+        </form>
 
         <p className="mt-6 flex items-start gap-2 border-t border-[#e5e4e7] pt-5 text-xs leading-5 text-[#7f7e7f]">
           <ArrowLeft className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

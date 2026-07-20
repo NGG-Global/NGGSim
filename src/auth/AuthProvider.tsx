@@ -15,7 +15,7 @@ interface AuthContextValue {
   error: string | null
   isConfigured: boolean
   configurationMessage: string
-  requestMagicLink: (email: string, emailRedirectTo: string) => Promise<void>
+  signInWithPassword: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   clearMessages: () => void
 }
@@ -74,7 +74,7 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
           explicitLogout.current
             ? 'התנתקת בהצלחה.'
             : hadSession.current
-              ? 'פג תוקף ההתחברות. כדי להמשיך יש לבקש קישור חדש.'
+              ? 'פג תוקף ההתחברות. כדי להמשיך יש להתחבר מחדש.'
               : null,
         )
         explicitLogout.current = false
@@ -102,7 +102,7 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
       if (claimsError || !claimsData || claimsData.claims.sub !== data.session.user.id) {
         setSession(null)
         setStatus('anonymous')
-        setNotice('פג תוקף ההתחברות. כדי להמשיך יש לבקש קישור חדש.')
+        setNotice('פג תוקף ההתחברות. כדי להמשיך יש להתחבר מחדש.')
         return
       }
 
@@ -123,20 +123,14 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
     error,
     isConfigured: resolvedClient !== null,
     configurationMessage: supabaseConfiguration.message,
-    requestMagicLink: async (email, emailRedirectTo) => {
+    signInWithPassword: async (email, password) => {
       setError(null)
       setNotice(null)
       if (!resolvedClient) throw new Error(supabaseConfiguration.message)
 
-      const { error: requestError } = await resolvedClient.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo,
-          shouldCreateUser: false,
-        },
-      })
-      if (requestError) {
-        const friendlyError = getFriendlyAuthError(requestError)
+      const { error: signInError } = await resolvedClient.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        const friendlyError = getFriendlyAuthError(signInError)
         setError(friendlyError)
         throw new Error(friendlyError)
       }
