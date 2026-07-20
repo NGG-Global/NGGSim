@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { assertRuntimeConfiguration, RuntimeConfigurationError } from './config/runtime'
 import { SimulationRepositoryProvider } from './repositories/SimulationRepositoryProvider'
 import './styles/index.css'
@@ -34,13 +35,15 @@ try {
 
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <BrowserRouter>
-        <AuthProvider>
-          <SimulationRepositoryProvider>
-            <App />
-          </SimulationRepositoryProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <AppErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <SimulationRepositoryProvider>
+              <App />
+            </SimulationRepositoryProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </AppErrorBoundary>
     </React.StrictMode>,
   )
 } catch (error) {
