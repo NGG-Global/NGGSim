@@ -131,7 +131,13 @@ function LiveConversationInner({ session, simulation, publicToken }: Props) {
     setStarting(true)
     try {
       const { signedUrl, overrides } = await repository.requestVoiceSignedUrl(session.id)
-      const sessionConfig = { signedUrl, ...(overrides ? { overrides } : {}) }
+      // Tag the call with our session id so the post-call webhook can match the
+      // analysis back to this attempt.
+      const sessionConfig = {
+        signedUrl,
+        ...(overrides ? { overrides } : {}),
+        dynamicVariables: { ngg_session_id: session.id },
+      }
       conversation.startSession(sessionConfig as Parameters<typeof conversation.startSession>[0])
       setStarted(true)
     } catch (startError) {
