@@ -80,17 +80,23 @@ export function SimulationResultsPage() {
 
               {report && (
                 <>
-                  <section className="rounded-3xl border border-[#dce5e1] bg-white p-6">
-                    <h2 className="text-lg font-bold">ציונים מדומים</h2>
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                      {Object.entries(report.scores).map(([label, score]) => (
-                        <div key={label}>
-                          <div className="mb-2 flex justify-between text-sm"><span className="font-bold">{label}</span><span>{score}/100</span></div>
-                          <div className="h-2 overflow-hidden rounded-full bg-[#e5ece9]"><div className="h-full rounded-full bg-forest" style={{ width: `${score}%` }} /></div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                  {Object.keys(report.scores).length > 0 && (
+                    <section className="rounded-3xl border border-[#dce5e1] bg-white p-6">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="text-lg font-bold">{repository.provider === 'local' ? 'ציונים מדומים' : 'ציונים לפי קריטריונים'}</h2>
+                        <span className="rounded-full bg-[#edf4f1] px-3 py-1.5 text-sm font-bold text-forest">ציון כולל {averageScore(report.scores)}/100</span>
+                      </div>
+                      {repository.provider !== 'local' && <p className="mt-1 text-xs text-[#6a807a]">כל קריטריון מדורג לפי עמידה בו: עומד = 100, חלקי/לא הוברר = 50, לא עומד = 0.</p>}
+                      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                        {Object.entries(report.scores).map(([label, score]) => (
+                          <div key={label}>
+                            <div className="mb-2 flex justify-between text-sm"><span className="font-bold">{label}</span><span>{score}/100</span></div>
+                            <div className="h-2 overflow-hidden rounded-full bg-[#e5ece9]"><div className="h-full rounded-full bg-forest" style={{ width: `${score}%` }} /></div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                   <div className="grid gap-5 md:grid-cols-2">
                     <ListCard title="נקודות חוזקה" items={report.strengths} tone="positive" />
                     <ListCard title="נקודות לשיפור" items={report.improvements} tone="improve" />
@@ -140,4 +146,10 @@ function formatDuration(seconds: number): string {
 function averageDuration(durations: number[]): string {
   if (!durations.length) return '0:00'
   return formatDuration(Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length))
+}
+
+function averageScore(scores: Record<string, number>): number {
+  const values = Object.values(scores)
+  if (!values.length) return 0
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
 }

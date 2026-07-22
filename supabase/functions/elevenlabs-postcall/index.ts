@@ -41,23 +41,36 @@ function findSessionId(root) {
   return '';
 }
 
-// Best-effort: turn ElevenLabs criteria results into strengths / improvements.
-function splitCriteria(analysis) {
+// Turn ElevenLabs criteria results into a numeric score + strengths / improvements.
+//
+// ElevenLabs returns, per evaluation criterion, a `result` of "success" | "failure"
+// | "unknown" plus a free-text `rationale`. There is NO numeric 1-5 in the payload —
+// the 1/3/5 anchors the facilitator wrote live inside each criterion's prompt, but the
+// API still reports a pass/fail-style result. So we derive a transparent 0-100 per
+// criterion (met = 100, unknown = 50, not met = 0) and, crucially, route BOTH "failure"
+// AND "unknown" into improvements so the feedback is never one-sided.
+function analyzeCriteria(analysis) {
   const raw = analysis?.evaluation_criteria_results;
-  const entries = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+  const entries = Array.isArray(raw)
+    ? raw.map((e) => [null, e])
+    : (raw && typeof raw === 'object' ? Object.entries(raw) : []);
+  const scores = {};
   const strengths = [];
   const improvements = [];
-  for (const e of entries) {
+  for (const [key, e] of entries) {
     if (!e || typeof e !== 'object') continue;
-    const label = String(e.criteria_id ?? e.name ?? '').trim();
-    const rationale = String(e.rationale ?? '').trim();
+    const label = String(e.criteria_id ?? e.name ?? e.id ?? key ?? '').trim();
+    const rationale = String(e.rationale ?? e.reason ?? e.explanation ?? '').trim();
+    const result = String(e.result ?? e.status ?? e.value ?? '').toLowerCase();
+    const met = result === 'success' || result === 'pass' || result === 'true';
+    const failed = result === 'failure' || result === 'fail' || result === 'false';
+    if (label) scores[label] = met ? 100 : failed ? 0 : 50;
     const text = [label, rationale].filter(Boolean).join(' — ');
     if (!text) continue;
-    const result = String(e.result ?? '').toLowerCase();
-    if (result === 'success' || result === 'pass') strengths.push(text);
-    else if (result === 'failure' || result === 'fail') improvements.push(text);
+    if (met) strengths.push(text);
+    else improvements.push(text); // "failure" or "unknown" — both are actionable
   }
-  return { strengths, improvements };
+  return { scores, strengths, improvements };
 }
 
 Deno.serve(async (req) => {
@@ -113,13 +126,13 @@ Deno.serve(async (req) => {
   if (!sess) { console.error('session not found for', sessionId); return ok(); }
 
   const analysis = data?.analysis ?? {};
-  const { strengths, improvements } = splitCriteria(analysis);
+  const { scores, strengths, improvements } = analyzeCriteria(analysis);
   const report = {
     session_id: sessionId,
     simulation_id: sess.simulation_id,
     owner_id: sess.owner_id,
     summary: String(analysis.transcript_summary ?? '').slice(0, 8000),
-    scores: {},
+    scores,
     strengths,
     improvements,
     learning_metrics: analysis, // keep the full analysis so nothing is lost while we finalise
