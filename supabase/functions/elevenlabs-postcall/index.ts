@@ -68,8 +68,22 @@ Deno.serve(async (req) => {
   const WEBHOOK_SECRET = Deno.env.get('ELEVENLABS_WEBHOOK_SECRET');
 
   const raw = await req.text();
-  // Log-first: capture the real payload shape (truncated) for finalising parsing.
-  console.log('elevenlabs-postcall raw payload', raw.slice(0, 2000));
+
+  // Diagnostics first (logging only; we still verify before acting below): reveal
+  // where the session tag lives and the exact analysis shape.
+  try {
+    const peek = JSON.parse(raw);
+    const d = peek?.data ?? peek;
+    console.log('postcall data keys', JSON.stringify(Object.keys(d ?? {})));
+    console.log('postcall dynvars', JSON.stringify({
+      cicd: d?.conversation_initiation_client_data?.dynamic_variables ?? null,
+      dv: d?.dynamic_variables ?? null,
+      meta: d?.metadata?.dynamic_variables ?? null,
+    }));
+    console.log('postcall analysis', JSON.stringify(d?.analysis ?? null)?.slice(0, 4000));
+  } catch {
+    console.log('postcall raw (unparseable)', raw.slice(0, 1000));
+  }
 
   // Verify the ElevenLabs signature: header "t=<ts>,v0=<hmac>", HMAC-SHA256 over `${t}.${raw}`.
   if (WEBHOOK_SECRET) {
