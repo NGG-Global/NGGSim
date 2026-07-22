@@ -25,10 +25,9 @@ Set under Dashboard → **Edge Functions** → **Secrets**:
 
 ## Functions
 
-- `elevenlabs-signed-url` — validates a participant session capability and returns
-  a short-lived ElevenLabs signed WebSocket URL. (Milestone 1.)
-
-Planned next:
-- `elevenlabs-conversation-init` — server-side conversation initiation webhook that
-  returns the per-simulation character as overrides (keeps hidden info off the browser).
-- `elevenlabs-postcall` — verified post-call webhook that stores the transcript/report.
+- `elevenlabs-signed-url` — validates a participant session capability, builds the
+  per-simulation character overrides (service role), and returns a short-lived
+  ElevenLabs signed WebSocket URL. "Verify JWT" OFF.
+- `elevenlabs-postcall` — post-call webhook. Verifies the ElevenLabs signature,
+  matches the analysis to our session via the `ngg_session_id` dynamic variable, and
+  stores the report. "Verify JWT" OFF. Extra secret: `ELEVENLABS_WEBHOOK_SECRET`.
