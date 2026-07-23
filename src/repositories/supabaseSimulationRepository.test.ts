@@ -413,7 +413,7 @@ describe('SupabaseSimulationRepository sessions/reports', () => {
         id: '66666666-6666-4666-8666-666666666666',
         session_id: completed.id,
         summary: 'סיכום מאומת',
-        scores: { הקשבה: 88 },
+        scores: { הקשבה: 4 },
         strengths: ['הקשבה'],
         improvements: ['סיכום'],
       })],
@@ -433,7 +433,7 @@ describe('SupabaseSimulationRepository sessions/reports', () => {
 
     expect(finished.status).toBe('completed')
     expect(sessions).toHaveLength(1)
-    expect(report).toMatchObject({ sessionId: initial.id, summary: 'סיכום מאומת', scores: { הקשבה: 88 } })
+    expect(report).toMatchObject({ sessionId: initial.id, summary: 'סיכום מאומת', scores: { הקשבה: 4 } })
     expect(fake.calls.find((call) => call.name === 'update_public_simulation_session')?.args)
       .toMatchObject({ p_session_id: initial.id, p_access_token: accessToken, p_duration_seconds: 12 })
     expect(fake.calls.find((call) => call.name === 'complete_public_simulation_session')?.args)

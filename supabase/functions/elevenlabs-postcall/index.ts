@@ -41,16 +41,35 @@ function findSessionId(root) {
   return '';
 }
 
-// Turn ElevenLabs criteria results into a numeric score + strengths / improvements.
+// Hebrew display names for the universal-rubric criteria ids ElevenLabs returns.
+// Unknown ids fall back to a humanised slug, so a mismatch degrades gracefully.
+const CRITERIA_LABELS_HE = {
+  situation_reading_and_diagnosis: 'קריאת מצב ואבחון',
+  listening_and_empathy: 'הקשבה ואמפתיה',
+  clarity_and_assertiveness: 'בהירות ואסרטיביות',
+  process_management: 'ניהול תהליך',
+  adaptability_and_responsiveness: 'הסתגלות ותגובתיות',
+  self_regulation_and_resilience: 'ויסות עצמי וחוסן',
+  professional_judgment: 'שיקול דעת מקצועי',
+  outcome_and_commitment: 'תוצאה ומחויבות',
+};
+
+function labelFor(criteriaId, fallbackKey) {
+  const id = String(criteriaId ?? '').trim();
+  if (id && CRITERIA_LABELS_HE[id]) return CRITERIA_LABELS_HE[id];
+  const source = id || String(fallbackKey ?? '').trim();
+  if (!source) return '';
+  return source.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+// Turn ElevenLabs' numeric rubric into per-criterion scores + strengths / improvements.
 //
-// ElevenLabs returns, per evaluation criterion, a `result` of "success" | "failure"
-// | "unknown" plus a free-text `rationale`. There is NO numeric 1-5 in the payload —
-// the 1/3/5 anchors the facilitator wrote live inside each criterion's prompt, but the
-// API still reports a pass/fail-style result. So we derive a transparent 0-100 per
-// criterion (met = 100, unknown = 50, not met = 0) and, crucially, route BOTH "failure"
-// AND "unknown" into improvements so the feedback is never one-sided.
+// Each criterion carries `score` (1..max_score) plus a Hebrew `rationale`. `result` is
+// "success" for everything above the pass line — a 4 and a 5 both say "success" — so we
+// split on the NUMBER, not on `result` (that was the "only the good stuff" bug). Scores
+// stay on the native 1..max scale the facilitator configured (max_score, 5 here).
 function analyzeCriteria(analysis) {
-  const raw = analysis?.evaluation_criteria_results;
+  const raw = analysis?.evaluation_criteria_results_list ?? analysis?.evaluation_criteria_results;
   const entries = Array.isArray(raw)
     ? raw.map((e) => [null, e])
     : (raw && typeof raw === 'object' ? Object.entries(raw) : []);
@@ -59,16 +78,18 @@ function analyzeCriteria(analysis) {
   const improvements = [];
   for (const [key, e] of entries) {
     if (!e || typeof e !== 'object') continue;
-    const label = String(e.criteria_id ?? e.name ?? e.id ?? key ?? '').trim();
+    const label = labelFor(e.criteria_id ?? e.name ?? e.id, key);
+    if (!label) continue;
+    const score = Number(e.score);
+    if (!Number.isFinite(score)) continue;
+    const max = Number(e.max_score);
+    const cmax = Number.isFinite(max) && max > 0 ? max : 5;
     const rationale = String(e.rationale ?? e.reason ?? e.explanation ?? '').trim();
-    const result = String(e.result ?? e.status ?? e.value ?? '').toLowerCase();
-    const met = result === 'success' || result === 'pass' || result === 'true';
-    const failed = result === 'failure' || result === 'fail' || result === 'false';
-    if (label) scores[label] = met ? 100 : failed ? 0 : 50;
-    const text = [label, rationale].filter(Boolean).join(' — ');
-    if (!text) continue;
-    if (met) strengths.push(text);
-    else improvements.push(text); // "failure" or "unknown" — both are actionable
+    scores[label] = score;
+    const text = rationale ? `${label} — ${rationale}` : label;
+    // High (>= 80% of max, i.e. 4-5 of 5) is a strength; anything lower is actionable.
+    if (score >= cmax * 0.8) strengths.push(text);
+    else improvements.push(text);
   }
   return { scores, strengths, improvements };
 }

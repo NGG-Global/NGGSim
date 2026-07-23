@@ -101,14 +101,16 @@ export function ParticipantCompletePage() {
   )
 }
 
+const SCORE_MAX = 5
+
 function FeedbackReport({ report }: { report: SimulationReport }) {
   const scores = Object.values(report.scores)
-  const overall = scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : null
+  const overall = scores.length ? Math.round((scores.reduce((sum, value) => sum + value, 0) / scores.length) * 10) / 10 : null
   return (
     <section className="mt-8 space-y-4 text-right">
       <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#dbe6e2] bg-[#f1f6f3] p-5">
         <h2 className="flex items-center gap-2 font-bold text-forest"><Sparkles className="h-5 w-5" aria-hidden="true" /> המשוב שלך</h2>
-        {overall !== null && <span className="rounded-full bg-white px-3 py-1.5 text-sm font-bold text-forest">ציון כולל {overall}/100</span>}
+        {overall !== null && <span className="rounded-full bg-white px-3 py-1.5 text-sm font-bold text-forest">ציון כולל {overall}/{SCORE_MAX}</span>}
       </div>
 
       {report.summary && (
