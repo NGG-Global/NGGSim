@@ -5,6 +5,7 @@ import { ParticipantBriefPanel } from '../../components/ParticipantBriefPanel'
 import { RepositoryErrorState, RepositoryLoadingState } from '../../components/RepositoryStates'
 import { Button } from '../../components/ui/Button'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { analysisCriterionLabel } from '../../data/analysisCriteria'
 import { toParticipantSimulationView } from '../../services/participantSimulationService'
 import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
 import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
@@ -94,18 +95,15 @@ function FacilitatorPreview({ simulation }: { simulation: Simulation }) {
         <Detail label="סיום הסימולציה" value={simulation.behavior.endingConditions} />
       </PreviewSection>
       <section className="rounded-3xl border border-[#dce5e1] bg-white p-6 xl:col-span-2">
-        <h2 className="text-lg font-bold text-ink">מטרות ומדדי למידה</h2>
-        {simulation.learningObjectives.length ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {simulation.learningObjectives.map((objective) => (
-              <div key={objective.id} className="rounded-2xl bg-[#f4f7f5] p-4">
-                <p className="font-bold text-ink">{objective.name || 'מטרה ללא שם'} {objective.weight !== undefined && <span className="text-xs text-[#687d77]">({objective.weight}%)</span>}</p>
-                <p className="mt-1 text-sm leading-6 text-[#5b726c]">{objective.description}</p>
-                <p className="mt-3 text-sm"><strong>מדד:</strong> {objective.metric.successMeasure || 'טרם הוגדר'}</p>
-              </div>
+        <h2 className="text-lg font-bold text-ink">קריטריונים להערכה</h2>
+        <p className="mt-1 text-sm text-[#687d77]">בסיום הסימולציה יופק משוב על הקריטריונים הבאים בלבד.</p>
+        {simulation.analysisCriteria.length ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {simulation.analysisCriteria.map((id) => (
+              <span key={id} className="rounded-full bg-[#edf4f1] px-3 py-1.5 text-sm font-bold text-forest">{analysisCriterionLabel(id)}</span>
             ))}
           </div>
-        ) : <p className="mt-3 text-sm text-[#687d77]">לא הוגדרו מטרות למידה.</p>}
+        ) : <p className="mt-3 text-sm text-[#687d77]">לא נבחרו קריטריונים להערכה.</p>}
       </section>
     </div>
   )

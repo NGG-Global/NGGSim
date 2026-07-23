@@ -68,7 +68,10 @@ function labelFor(criteriaId, fallbackKey) {
 // "success" for everything above the pass line — a 4 and a 5 both say "success" — so we
 // split on the NUMBER, not on `result` (that was the "only the good stuff" bug). Scores
 // stay on the native 1..max scale the facilitator configured (max_score, 5 here).
-function analyzeCriteria(analysis) {
+//
+// `allowed` is the set of criteria ids this simulation opted into (null = all). The
+// agent always runs every criterion, so we filter here to the facilitator's choice.
+function analyzeCriteria(analysis, allowed) {
   const raw = analysis?.evaluation_criteria_results_list ?? analysis?.evaluation_criteria_results;
   const entries = Array.isArray(raw)
     ? raw.map((e) => [null, e])
@@ -78,6 +81,8 @@ function analyzeCriteria(analysis) {
   const improvements = [];
   for (const [key, e] of entries) {
     if (!e || typeof e !== 'object') continue;
+    const rawId = String(e.criteria_id ?? e.name ?? e.id ?? key ?? '').trim();
+    if (allowed && rawId && !allowed.has(rawId)) continue; // criterion not chosen for this simulation
     const label = labelFor(e.criteria_id ?? e.name ?? e.id, key);
     if (!label) continue;
     const score = Number(e.score);
@@ -146,8 +151,19 @@ Deno.serve(async (req) => {
   const sess = Array.isArray(sRows) ? sRows[0] : null;
   if (!sess) { console.error('session not found for', sessionId); return ok(); }
 
+  // Load the simulation's chosen criteria so we only report on what the facilitator
+  // opted into. Empty/absent means "all criteria".
+  let allowed = null;
+  const simResp = await fetch(`${SUPABASE_URL}/rest/v1/simulations?id=eq.${sess.simulation_id}&select=analysis_criteria&limit=1`,
+    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } });
+  if (simResp.ok) {
+    const simRows = await simResp.json().catch(() => []);
+    const list = Array.isArray(simRows) && simRows[0] && Array.isArray(simRows[0].analysis_criteria) ? simRows[0].analysis_criteria : [];
+    if (list.length) allowed = new Set(list.map((id) => String(id)));
+  }
+
   const analysis = data?.analysis ?? {};
-  const { scores, strengths, improvements } = analyzeCriteria(analysis);
+  const { scores, strengths, improvements } = analyzeCriteria(analysis, allowed);
   const report = {
     session_id: sessionId,
     simulation_id: sess.simulation_id,

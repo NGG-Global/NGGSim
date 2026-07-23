@@ -1,3 +1,4 @@
+import { ANALYSIS_CRITERIA_IDS } from './analysisCriteria'
 import type { ParticipantField, Simulation } from '../types/simulation'
 
 export const participantFieldDefaults: ParticipantField[] = [
@@ -80,6 +81,7 @@ export function createBlankSimulation(id: string): Simulation {
       endingConditions: '',
     },
     learningObjectives: [],
+    analysisCriteria: [...ANALYSIS_CRITERIA_IDS],
     createdAt: now,
     updatedAt: now,
     publishedAt: null,

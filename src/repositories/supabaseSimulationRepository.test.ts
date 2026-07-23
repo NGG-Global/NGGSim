@@ -96,6 +96,7 @@ function simulationRow(overrides: Partial<SimulationRow> = {}): SimulationRow {
     participant_fields: simulation.participantFields,
     facilitator_configuration: simulation.facilitatorConfiguration,
     learning_objectives: simulation.learningObjectives,
+    analysis_criteria: simulation.analysisCriteria,
     version: 1,
     published_at: null,
     deleted_at: null,
