@@ -2,8 +2,7 @@
 //
 // Receives the ElevenLabs post-call webhook, verifies its signature, matches the
 // analysis to our session (via the ngg_session_id dynamic variable we set at call
-// start), and stores a report. Built "log-first": the raw payload is logged so we
-// can confirm ElevenLabs' exact shape and finalise parsing from real data.
+// start), filters it to the simulation's chosen criteria, and stores a report.
 //
 // Deploy with "Verify JWT" OFF (ElevenLabs calls this, not a logged-in user).
 // Secrets: ELEVENLABS_WEBHOOK_SECRET (from the ElevenLabs webhook config).
@@ -41,23 +40,62 @@ function findSessionId(root) {
   return '';
 }
 
-// Best-effort: turn ElevenLabs criteria results into strengths / improvements.
-function splitCriteria(analysis) {
-  const raw = analysis?.evaluation_criteria_results;
-  const entries = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+// Hebrew display names for the universal-rubric criteria ids ElevenLabs returns.
+// Unknown ids fall back to a humanised slug, so a mismatch degrades gracefully.
+const CRITERIA_LABELS_HE = {
+  situation_reading_and_diagnosis: 'קריאת מצב ואבחון',
+  listening_and_empathy: 'הקשבה ואמפתיה',
+  clarity_and_assertiveness: 'בהירות ואסרטיביות',
+  process_management: 'ניהול תהליך',
+  adaptability_and_responsiveness: 'הסתגלות ותגובתיות',
+  self_regulation_and_resilience: 'ויסות עצמי וחוסן',
+  professional_judgment: 'שיקול דעת מקצועי',
+  outcome_and_commitment: 'תוצאה ומחויבות',
+};
+
+function labelFor(criteriaId, fallbackKey) {
+  const id = String(criteriaId ?? '').trim();
+  if (id && CRITERIA_LABELS_HE[id]) return CRITERIA_LABELS_HE[id];
+  const source = id || String(fallbackKey ?? '').trim();
+  if (!source) return '';
+  return source.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+// Turn ElevenLabs' numeric rubric into per-criterion scores + strengths / improvements.
+//
+// Each criterion carries `score` (1..max_score) plus a Hebrew `rationale`. `result` is
+// "success" for everything above the pass line — a 4 and a 5 both say "success" — so we
+// split on the NUMBER, not on `result` (that was the "only the good stuff" bug). Scores
+// stay on the native 1..max scale the facilitator configured (max_score, 5 here).
+//
+// `allowed` is the set of criteria ids this simulation opted into (null = all). The
+// agent always runs every criterion, so we filter here to the facilitator's choice.
+function analyzeCriteria(analysis, allowed) {
+  const raw = analysis?.evaluation_criteria_results_list ?? analysis?.evaluation_criteria_results;
+  const entries = Array.isArray(raw)
+    ? raw.map((e) => [null, e])
+    : (raw && typeof raw === 'object' ? Object.entries(raw) : []);
+  const scores = {};
   const strengths = [];
   const improvements = [];
-  for (const e of entries) {
+  for (const [key, e] of entries) {
     if (!e || typeof e !== 'object') continue;
-    const label = String(e.criteria_id ?? e.name ?? '').trim();
-    const rationale = String(e.rationale ?? '').trim();
-    const text = [label, rationale].filter(Boolean).join(' — ');
-    if (!text) continue;
-    const result = String(e.result ?? '').toLowerCase();
-    if (result === 'success' || result === 'pass') strengths.push(text);
-    else if (result === 'failure' || result === 'fail') improvements.push(text);
+    const rawId = String(e.criteria_id ?? e.name ?? e.id ?? key ?? '').trim();
+    if (allowed && rawId && !allowed.has(rawId)) continue; // criterion not chosen for this simulation
+    const label = labelFor(e.criteria_id ?? e.name ?? e.id, key);
+    if (!label) continue;
+    const score = Number(e.score);
+    if (!Number.isFinite(score)) continue;
+    const max = Number(e.max_score);
+    const cmax = Number.isFinite(max) && max > 0 ? max : 5;
+    const rationale = String(e.rationale ?? e.reason ?? e.explanation ?? '').trim();
+    scores[label] = score;
+    const text = rationale ? `${label} — ${rationale}` : label;
+    // High (>= 80% of max, i.e. 4-5 of 5) is a strength; anything lower is actionable.
+    if (score >= cmax * 0.8) strengths.push(text);
+    else improvements.push(text);
   }
-  return { strengths, improvements };
+  return { scores, strengths, improvements };
 }
 
 Deno.serve(async (req) => {
@@ -68,8 +106,6 @@ Deno.serve(async (req) => {
   const WEBHOOK_SECRET = Deno.env.get('ELEVENLABS_WEBHOOK_SECRET');
 
   const raw = await req.text();
-  // Log-first: capture the real payload shape (truncated) for finalising parsing.
-  console.log('elevenlabs-postcall raw payload', raw.slice(0, 2000));
 
   // Verify the ElevenLabs signature: header "t=<ts>,v0=<hmac>", HMAC-SHA256 over `${t}.${raw}`.
   if (WEBHOOK_SECRET) {
@@ -98,14 +134,25 @@ Deno.serve(async (req) => {
   const sess = Array.isArray(sRows) ? sRows[0] : null;
   if (!sess) { console.error('session not found for', sessionId); return ok(); }
 
+  // Load the simulation's chosen criteria so we only report on what the facilitator
+  // opted into. Empty/absent means "all criteria".
+  let allowed = null;
+  const simResp = await fetch(`${SUPABASE_URL}/rest/v1/simulations?id=eq.${sess.simulation_id}&select=analysis_criteria&limit=1`,
+    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } });
+  if (simResp.ok) {
+    const simRows = await simResp.json().catch(() => []);
+    const list = Array.isArray(simRows) && simRows[0] && Array.isArray(simRows[0].analysis_criteria) ? simRows[0].analysis_criteria : [];
+    if (list.length) allowed = new Set(list.map((id) => String(id)));
+  }
+
   const analysis = data?.analysis ?? {};
-  const { strengths, improvements } = splitCriteria(analysis);
+  const { scores, strengths, improvements } = analyzeCriteria(analysis, allowed);
   const report = {
     session_id: sessionId,
     simulation_id: sess.simulation_id,
     owner_id: sess.owner_id,
     summary: String(analysis.transcript_summary ?? '').slice(0, 8000),
-    scores: {},
+    scores,
     strengths,
     improvements,
     learning_metrics: analysis, // keep the full analysis so nothing is lost while we finalise

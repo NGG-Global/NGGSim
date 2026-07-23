@@ -120,6 +120,8 @@ export interface Simulation {
   character: Character
   behavior: CharacterBehavior
   learningObjectives: LearningObjective[]
+  /** Ids of the analysis criteria this simulation is evaluated on (subset of ANALYSIS_CRITERIA). */
+  analysisCriteria: string[]
   createdAt: string
   updatedAt: string
   publishedAt: string | null

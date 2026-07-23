@@ -1,3 +1,4 @@
+import { ANALYSIS_CRITERIA_IDS } from '../data/analysisCriteria'
 import { createBlankSimulation } from '../data/defaults'
 import type {
   Character,
@@ -31,6 +32,7 @@ export interface SimulationRow {
   participant_fields: unknown
   facilitator_configuration: unknown
   learning_objectives: unknown
+  analysis_criteria: unknown
   version: number
   published_at: string | null
   deleted_at: string | null
@@ -132,6 +134,12 @@ export function mapSimulationRow(
       ...record(row.facilitator_configuration),
     } as FacilitatorConfiguration,
     learningObjectives: array<LearningObjective>(row.learning_objectives),
+    // Empty/absent means "all criteria" (older rows predate this column and the webhook
+    // treats empty the same way), so surface that as every criterion selected in the UI.
+    analysisCriteria: (() => {
+      const stored = array<string>(row.analysis_criteria).filter((id) => typeof id === 'string' && id)
+      return stored.length ? stored : [...ANALYSIS_CRITERIA_IDS]
+    })(),
     publicToken: mappedShareLink?.token ?? null,
     shareLink: mappedShareLink,
     publishedAt: row.published_at,
@@ -153,6 +161,7 @@ export function simulationToDatabaseFields(simulation: Simulation): Record<strin
     participant_fields: simulation.participantFields,
     facilitator_configuration: simulation.facilitatorConfiguration,
     learning_objectives: simulation.learningObjectives,
+    analysis_criteria: simulation.analysisCriteria,
     published_at: simulation.publishedAt,
   }
 }

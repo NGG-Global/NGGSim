@@ -1,9 +1,9 @@
-import { Eye, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Eye, ShieldCheck } from 'lucide-react'
 import { ParticipantBriefPanel } from '../../components/ParticipantBriefPanel'
-import { Button } from '../../components/ui/Button'
 import { SelectField, TextareaField, TextField, Toggle } from '../../components/ui/FormControls'
+import { ANALYSIS_CRITERIA, ANALYSIS_CRITERIA_IDS } from '../../data/analysisCriteria'
 import { toParticipantSimulationView } from '../../services/participantSimulationService'
-import type { LearningObjective, ParticipantField, Simulation } from '../../types/simulation'
+import type { ParticipantField, Simulation } from '../../types/simulation'
 
 interface Props {
   step: number
@@ -195,48 +195,32 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
   }
 
   if (step === 6) {
-    const addObjective = () => {
-      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
-      const objective: LearningObjective = {
-        id: `objective-${id}`,
-        name: '',
-        description: '',
-        weight: undefined,
-        metric: { id: `metric-${id}`, name: '', successMeasure: '', visibleToParticipant: false, facilitatorOnly: true },
-      }
-      onChange({ learningObjectives: [...simulation.learningObjectives, objective] })
+    const selected = new Set(simulation.analysisCriteria)
+    const toggleCriterion = (id: string, checked: boolean) => {
+      const next = new Set(simulation.analysisCriteria)
+      if (checked) next.add(id)
+      else next.delete(id)
+      // Store in the canonical criteria order so the report reads consistently.
+      onChange({ analysisCriteria: ANALYSIS_CRITERIA_IDS.filter((value) => next.has(value)) })
     }
-    const updateObjective = (id: string, patch: Partial<LearningObjective>) => onChange({ learningObjectives: simulation.learningObjectives.map((objective) => objective.id === id ? { ...objective, ...patch } : objective) })
-    const removeObjective = (id: string) => onChange({ learningObjectives: simulation.learningObjectives.filter((objective) => objective.id !== id) })
 
     return (
-      <StepSection number="ז" title="מטרות ומדדי למידה" description="המדדים ישמשו בעתיד להערכת השיחה. ברירת המחדל היא שהם פנימיים למנחה.">
-        {simulation.learningObjectives.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#b9cbc6] bg-[#f7faf8] p-8 text-center">
-            <p className="font-bold text-ink">עדיין לא הוגדרו מטרות למידה</p>
-            <p className="mt-2 text-sm text-[#607771]">אפשר להתחיל מהקשבה פעילה, אמפתיה, בהירות המסר או סיכום צעדים.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {simulation.learningObjectives.map((objective, index) => (
-              <fieldset key={objective.id} className="rounded-2xl border border-[#d8e2de] bg-[#fbfcfb] p-5">
-                <legend className="px-2 text-sm font-bold text-forest">מטרה {index + 1}</legend>
-                <div className="form-grid">
-                  <TextField label="שם המטרה" value={objective.name} onChange={(event) => updateObjective(objective.id, { name: event.target.value })} placeholder="לדוגמה: הקשבה פעילה" />
-                  <TextField type="number" min="0" max="100" label="משקל אופציונלי" value={objective.weight ?? ''} onChange={(event) => updateObjective(objective.id, { weight: event.target.value ? Number(event.target.value) : undefined })} />
-                  <TextareaField label="תיאור" value={objective.description} onChange={(event) => updateObjective(objective.id, { description: event.target.value })} />
-                  <TextareaField label="מדד הצלחה" value={objective.metric.successMeasure} onChange={(event) => updateObjective(objective.id, { metric: { ...objective.metric, successMeasure: event.target.value } })} />
-                  <TextField label="שם המדד" value={objective.metric.name} onChange={(event) => updateObjective(objective.id, { metric: { ...objective.metric, name: event.target.value } })} />
-                  <div className="flex flex-col gap-3 pt-1">
-                    <Toggle checked={objective.metric.visibleToParticipant} onChange={(checked) => updateObjective(objective.id, { metric: { ...objective.metric, visibleToParticipant: checked, facilitatorOnly: !checked } })} label="המדד יוצג למשתתף" />
-                    <Button variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => removeObjective(objective.id)}>הסרת המטרה</Button>
-                  </div>
-                </div>
-              </fieldset>
-            ))}
-          </div>
+      <StepSection number="ז" title="מטרות למידה — קריטריונים להערכה" description="בחרו אילו קריטריונים ינותחו בסיום הסימולציה. במשוב יוצגו אך ורק הקריטריונים שנבחרו כאן.">
+        <div className="space-y-3">
+          {ANALYSIS_CRITERIA.map((criterion) => (
+            <div key={criterion.id} className="rounded-2xl border border-[#d8e2de] bg-[#fbfcfb] p-4">
+              <Toggle
+                checked={selected.has(criterion.id)}
+                onChange={(checked) => toggleCriterion(criterion.id, checked)}
+                label={criterion.label}
+                description={criterion.description}
+              />
+            </div>
+          ))}
+        </div>
+        {simulation.analysisCriteria.length === 0 && (
+          <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">יש לבחור לפחות קריטריון אחד כדי שיופק משוב בסיום הסימולציה.</p>
         )}
-        <Button variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={addObjective}>הוספת מטרת למידה</Button>
       </StepSection>
     )
   }
@@ -247,7 +231,7 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
         <SummaryCard label="סימולציה" value={simulation.title || 'טרם הוגדר שם'} detail={`${simulation.organization.clientName || 'ללא ארגון'} · ${simulation.scenario.conversationType}`} />
         <SummaryCard label="דמות" value={simulation.character.name || 'טרם הוגדרה דמות'} detail={`${simulation.character.role || 'ללא תפקיד'} · קושי ${simulation.behavior.difficulty}`} />
         <SummaryCard label="תדריך למשתתף" value={simulation.participantBrief.title || 'התדריך עדיין חסר'} detail={simulation.participantBrief.shortDescription || 'נדרש תיאור קצר לפני פרסום'} />
-        <SummaryCard label="איסוף נתונים" value={`${simulation.participantFields.filter((field) => field.enabled).length} שדות משתתף`} detail={`${simulation.learningObjectives.length} מטרות למידה`} />
+        <SummaryCard label="איסוף נתונים" value={`${simulation.participantFields.filter((field) => field.enabled).length} שדות משתתף`} detail={`${simulation.analysisCriteria.length} קריטריונים להערכה`} />
       </div>
       <div className="rounded-2xl border border-[#d8e4df] bg-[#edf5f1] p-5">
         <h3 className="flex items-center gap-2 font-bold text-forest"><ShieldCheck className="h-5 w-5" aria-hidden="true" /> הפרדת המידע נשמרת</h3>
