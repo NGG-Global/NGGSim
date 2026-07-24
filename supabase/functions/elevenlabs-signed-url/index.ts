@@ -59,6 +59,7 @@ function buildSystemPrompt(sim) {
     line('התנהגויות שיש להימנע מהן', c.avoidedBehaviors),
     '',
     'הסיטואציה:',
+    line('סוג השיחה', s.conversationType),
     line('רקע', s.description),
     line('מה קרה לפני השיחה', s.priorEvents),
     '',
@@ -72,6 +73,9 @@ function buildSystemPrompt(sim) {
     b.canCalmDown ? 'אתה יכול להירגע במהלך השיחה אם המשתתף מגיב באמפתיה ובהקשבה.' : '',
     line('מה גורם לך להיפתח', b.openingTriggers),
     line('מה גורם להסלמה מצדך', b.escalationTriggers),
+    line('סימנים לכך שהשיחה מתקדמת היטב ואתה יכול לרכך את עמדתך', b.successConditions),
+    line('סימנים לכך שהשיחה אינה מתקדמת ואתה נעשה נוקשה יותר', b.failureConditions),
+    line('כיצד השיחה יכולה להסתיים באופן טבעי', b.endingConditions),
     '',
     line('הנחיות נוספות מהמנחה', f.futureAgentPrompt),
   ];

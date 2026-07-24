@@ -57,7 +57,6 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           </SelectField>
           <TextareaField label="תיאור הסיטואציה" required value={simulation.scenario.description} onChange={(event) => updateScenario({ description: event.target.value })} placeholder="מי נמצא בשיחה ומהו הנושא המרכזי?" />
           <TextareaField label="מה קרה לפני תחילת השיחה" value={simulation.scenario.priorEvents} onChange={(event) => updateScenario({ priorEvents: event.target.value })} />
-          <TextareaField label="מה המשתתף אמור לנסות להשיג" value={simulation.scenario.participantGoal} onChange={(event) => updateScenario({ participantGoal: event.target.value })} />
           <TextareaField label="מידע שהמשתתף יודע בתחילת הסימולציה" value={simulation.scenario.participantKnownInfo} onChange={(event) => updateScenario({ participantKnownInfo: event.target.value })} />
           <TextareaField label="מידע שאסור להציג למשתתף" hint="מידע זה יישאר בממשק המנחים בלבד." value={simulation.scenario.hiddenInfo} onChange={(event) => updateScenario({ hiddenInfo: event.target.value })} />
         </div>
@@ -78,7 +77,7 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           <TextField label="תפקיד הדמות" value={simulation.character.role} onChange={(event) => updateCharacter({ role: event.target.value })} />
           <TextField label="הקשר שלה למשתתף" value={simulation.character.relationToParticipant} onChange={(event) => updateCharacter({ relationToParticipant: event.target.value })} placeholder="לדוגמה: עובד ישיר בצוות" />
           <TextField label="מצב רגשי בתחילת השיחה" value={simulation.character.initialEmotionalState} onChange={(event) => updateCharacter({ initialEmotionalState: event.target.value })} />
-          <SelectField label="קול הדמות" hint="בחירת קול נשי או גברי לדמות. הקול יופעל כאשר מנוע השיחה יחובר." value={simulation.character.voiceGender} onChange={(event) => updateCharacter({ voiceGender: event.target.value as Simulation['character']['voiceGender'] })}>
+          <SelectField label="קול הדמות" hint="בחירת קול נשי או גברי לדמות בשיחה הקולית." value={simulation.character.voiceGender} onChange={(event) => updateCharacter({ voiceGender: event.target.value as Simulation['character']['voiceGender'] })}>
             <option value="female">קול נשי</option>
             <option value="male">קול גברי</option>
           </SelectField>
@@ -122,7 +121,6 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           <SelectField label="מידת ההתנגדות" value={simulation.behavior.resistance} onChange={(event) => updateBehavior({ resistance: event.target.value as Simulation['behavior']['resistance'] })}>
             <option>נמוכה</option><option>בינונית</option><option>גבוהה</option>
           </SelectField>
-          <TextField type="number" min="1" max="60" label="משך מומלץ בדקות" value={simulation.behavior.recommendedMinutes} onChange={(event) => updateBehavior({ recommendedMinutes: Number(event.target.value) })} />
           <TextField label="משפט פתיחה של הדמות" value={simulation.behavior.openingLine} onChange={(event) => updateBehavior({ openingLine: event.target.value })} />
           <TextareaField label="אילו פעולות יגרמו לדמות להיפתח" value={simulation.behavior.openingTriggers} onChange={(event) => updateBehavior({ openingTriggers: event.target.value })} />
           <TextareaField label="אילו פעולות יגרמו להסלמה" value={simulation.behavior.escalationTriggers} onChange={(event) => updateBehavior({ escalationTriggers: event.target.value })} />
@@ -130,10 +128,10 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           <TextareaField label="תנאים אפשריים לכישלון" value={simulation.behavior.failureConditions} onChange={(event) => updateBehavior({ failureConditions: event.target.value })} />
           <TextareaField className="md:col-span-2" label="האופן שבו הסימולציה יכולה להסתיים" value={simulation.behavior.endingConditions} onChange={(event) => updateBehavior({ endingConditions: event.target.value })} />
         </div>
-        <Toggle checked={simulation.behavior.canCalmDown} onChange={(checked) => updateBehavior({ canCalmDown: checked })} label="הדמות יכולה להירגע במהלך השיחה" description="בעתיד מנוע השיחה ישתמש בהגדרה זו כדי להתאים את תגובות הדמות." />
+        <Toggle checked={simulation.behavior.canCalmDown} onChange={(checked) => updateBehavior({ canCalmDown: checked })} label="הדמות יכולה להירגע במהלך השיחה" description="כאשר האפשרות פעילה, הדמות עשויה להירגע במהלך השיחה אם המשתתף מגיב באמפתיה ובהקשבה." />
         <div className="form-grid">
           <TextareaField label="הנחיות פנימיות למנחה" value={simulation.facilitatorConfiguration.internalNotes} onChange={(event) => updateFacilitator({ internalNotes: event.target.value })} />
-          <TextareaField label="הנחיית דמות עתידית ל־ElevenLabs" hint="זהו placeholder בלבד; לא נשלח כעת לשירות חיצוני." value={simulation.facilitatorConfiguration.futureAgentPrompt} onChange={(event) => updateFacilitator({ futureAgentPrompt: event.target.value })} />
+          <TextareaField label="הנחיות נוספות לדמות" hint="הנחיות אלה נשלחות למנוע השיחה ומשפיעות ישירות על התנהגות הדמות." value={simulation.facilitatorConfiguration.futureAgentPrompt} onChange={(event) => updateFacilitator({ futureAgentPrompt: event.target.value })} />
         </div>
       </StepSection>
     )

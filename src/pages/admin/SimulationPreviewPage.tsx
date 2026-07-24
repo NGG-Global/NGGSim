@@ -84,7 +84,7 @@ function FacilitatorPreview({ simulation }: { simulation: Simulation }) {
       <PreviewSection title="מידע פנימי ורגיש" tone="private">
         <Detail label="מידע שאסור להציג למשתתף" value={simulation.scenario.hiddenInfo} />
         <Detail label="מידע מותנה של הדמות" value={simulation.character.conditionalInfo} />
-        <Detail label="הנחיית דמות עתידית" value={simulation.facilitatorConfiguration.futureAgentPrompt} />
+        <Detail label="הנחיות נוספות לדמות" value={simulation.facilitatorConfiguration.futureAgentPrompt} />
         <Detail label="הערות מנחה" value={simulation.facilitatorConfiguration.internalNotes} />
       </PreviewSection>
       <PreviewSection title="התנהגות ותנאי הערכה" tone="private">

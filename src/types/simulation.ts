@@ -12,7 +12,6 @@ export interface Scenario {
   conversationType: string
   description: string
   priorEvents: string
-  participantGoal: string
   participantKnownInfo: string
   hiddenInfo: string
 }
@@ -42,7 +41,6 @@ export interface CharacterBehavior {
   escalationTriggers: string
   successConditions: string
   failureConditions: string
-  recommendedMinutes: number
   openingLine: string
   endingConditions: string
 }
