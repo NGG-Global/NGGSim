@@ -45,6 +45,64 @@ export function cohortCriteriaAverages(reports: Array<SimulationReport | null>):
   }))
 }
 
+export interface DateGroup {
+  key: string // yyyy-mm-dd, used for sorting
+  label: string // Hebrew long date
+  shortLabel: string // dd/mm for compact charts
+  attempts: number // sessions started that day
+  scored: number // sessions that day with an analysed report
+  avgDuration: number // seconds, across all attempts that day
+  avgOverall: number | null // mean of each scored session's overall (1..SCORE_MAX)
+  criteria: Array<{ label: string; score: number; count: number }>
+}
+
+function dayKey(iso: string): string {
+  return typeof iso === 'string' ? iso.slice(0, 10) : ''
+}
+
+/** Group completed sessions into per-day buckets with group-level averages.
+ * Newest day first. Averages cover only the day's analysed reports; `scored`
+ * and `attempts` are surfaced so small samples read honestly. */
+export function groupSessionsByDate(
+  sessions: SimulationSession[],
+  reports: Map<string, SimulationReport | null>,
+): DateGroup[] {
+  const buckets = new Map<string, SimulationSession[]>()
+  for (const session of sessions) {
+    const key = dayKey(session.startedAt)
+    if (!key) continue
+    const list = buckets.get(key) ?? []
+    list.push(session)
+    buckets.set(key, list)
+  }
+
+  const groups: DateGroup[] = []
+  for (const [key, list] of buckets) {
+    const dayReports = list
+      .map((session) => reports.get(session.id) ?? null)
+      .filter((report): report is SimulationReport => !!report && Object.keys(report.scores).length > 0)
+    const overalls = dayReports.map((report) => averageScore(report.scores))
+    const avgOverall = overalls.length
+      ? Math.round((overalls.reduce((sum, value) => sum + value, 0) / overalls.length) * 10) / 10
+      : null
+    const avgDuration = list.length
+      ? Math.round(list.reduce((sum, session) => sum + session.durationSeconds, 0) / list.length)
+      : 0
+    const date = new Date(`${key}T00:00:00`)
+    groups.push({
+      key,
+      label: new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }).format(date),
+      shortLabel: new Intl.DateTimeFormat('he-IL', { day: '2-digit', month: '2-digit' }).format(date),
+      attempts: list.length,
+      scored: dayReports.length,
+      avgDuration,
+      avgOverall,
+      criteria: cohortCriteriaAverages(dayReports),
+    })
+  }
+  return groups.sort((a, b) => (a.key < b.key ? 1 : -1))
+}
+
 const FIELD_LABELS: Record<string, string> = {
   fullName: 'שם מלא',
   email: 'כתובת אימייל',
