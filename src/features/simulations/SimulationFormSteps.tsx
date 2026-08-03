@@ -1,9 +1,11 @@
 import { Eye, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
 import { ParticipantBriefPanel } from '../../components/ParticipantBriefPanel'
 import { SelectField, TextareaField, TextField, Toggle } from '../../components/ui/FormControls'
 import { ANALYSIS_CRITERIA, ANALYSIS_CRITERIA_IDS } from '../../data/analysisCriteria'
 import { toParticipantSimulationView } from '../../services/participantSimulationService'
 import type { ParticipantField, Simulation } from '../../types/simulation'
+import { readLogoDataUrl } from './branding'
 
 interface Props {
   step: number
@@ -26,6 +28,7 @@ const conversationTypes = [
 const personalityOptions = ['ענייני', 'חשדן', 'מתגונן', 'כועס', 'מתוסכל', 'פסיבי', 'ישיר', 'ציני', 'משתף פעולה', 'נמנע מעימות']
 
 export function SimulationFormSteps({ step, simulation, onChange }: Props) {
+  const [logoError, setLogoError] = useState('')
   const updateOrganization = (patch: Partial<Simulation['organization']>) => onChange({ organization: { ...simulation.organization, ...patch } })
   const updateScenario = (patch: Partial<Simulation['scenario']>) => onChange({ scenario: { ...simulation.scenario, ...patch } })
   const updateCharacter = (patch: Partial<Simulation['character']>) => onChange({ character: { ...simulation.character, ...patch } })
@@ -44,6 +47,45 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           <TextareaField className="md:col-span-2" label="תיאור קצר של ההקשר הארגוני" value={simulation.organization.context} onChange={(event) => updateOrganization({ context: event.target.value })} placeholder="מה חשוב לדעת על הארגון, התוכנית או הסיבה לתרגול?" />
         </div>
         <Toggle checked={simulation.organization.showOrganizationToParticipant} onChange={(checked) => updateOrganization({ showOrganizationToParticipant: checked })} label="הצגת שם התוכנית או הארגון למשתתף" description="כאשר האפשרות כבויה, המשתתף יראה רק את שם הסימולציה והתדריך." />
+
+        <fieldset className="rounded-2xl border border-[#d8e2de] bg-[#fbfcfb] p-5">
+          <legend className="px-2 text-sm font-bold text-forest">מיתוג ללקוח</legend>
+          <p className="form-hint">הצבע והלוגו יופיעו בעמודי המשתתף בלבד, כדי להתאים את התרגול למותג הלקוח. אינם משפיעים על ממשק המנחים.</p>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <span className="form-label">צבע מותג</span>
+              <div className="flex items-center gap-3">
+                <input type="color" aria-label="צבע מותג" value={simulation.organization.accentColor || '#ec2a8c'} onChange={(event) => updateOrganization({ accentColor: event.target.value })} className="h-11 w-16 cursor-pointer rounded-lg border border-[#c7c6c7] bg-white p-1" />
+                <span className="text-sm text-[#5a5a5c]">{simulation.organization.accentColor || 'ברירת מחדל של NGG'}</span>
+                {simulation.organization.accentColor && (
+                  <button type="button" onClick={() => updateOrganization({ accentColor: '' })} className="text-sm font-bold text-coral underline">איפוס</button>
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="form-label">לוגו הלקוח</span>
+              {simulation.organization.logo ? (
+                <div className="flex items-center gap-3">
+                  <img src={simulation.organization.logo} alt="תצוגת לוגו" className="h-12 w-auto max-w-[140px] rounded border border-[#e5e4e7] bg-white object-contain p-1" />
+                  <button type="button" onClick={() => { setLogoError(''); updateOrganization({ logo: '' }) }} className="text-sm font-bold text-coral underline">הסרה</button>
+                </div>
+              ) : (
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[#c7c6c7] bg-white px-4 py-2.5 text-sm font-bold text-[#5a5a5c] transition hover:border-forest">
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={async (event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ''
+                    if (!file) return
+                    setLogoError('')
+                    try { updateOrganization({ logo: await readLogoDataUrl(file) }) }
+                    catch (uploadError) { setLogoError(uploadError instanceof Error ? uploadError.message : 'העלאת הלוגו נכשלה.') }
+                  }} />
+                  העלאת לוגו (PNG, JPG, WEBP או SVG)
+                </label>
+              )}
+              {logoError && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{logoError}</p>}
+            </div>
+          </div>
+        </fieldset>
       </StepSection>
     )
   }

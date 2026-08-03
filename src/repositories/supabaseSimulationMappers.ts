@@ -196,6 +196,8 @@ export function mapParticipantSimulationRpc(value: unknown): ParticipantSimulati
     })),
     character: { name: String(character.name ?? ''), role: String(character.role ?? '') },
     scenarioSummary: String(source.scenarioSummary ?? ''),
+    ...(source.accentColor ? { accentColor: String(source.accentColor) } : {}),
+    ...(source.logo ? { logo: String(source.logo) } : {}),
   }
 }
 

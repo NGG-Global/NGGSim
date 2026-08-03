@@ -25,6 +25,8 @@ export function createBlankSimulation(id: string): Simulation {
       audience: '',
       context: '',
       showOrganizationToParticipant: true,
+      accentColor: '',
+      logo: '',
     },
     facilitatorConfiguration: {
       internalNotes: '',

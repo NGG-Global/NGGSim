@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 :root {
+  /* Brand accent as "R G B" triplets for the Tailwind forest/coral/sage tokens.
+     Defaults equal the NGG hexes; the participant layout overrides them per client. */
+  --c-forest: 236 42 140;
+  --c-coral: 209 30 120;
+  --c-sage: 253 238 246;
+
   --ngg-accent: #ec2a8c;
   --ngg-accent-hover: #d11e78;
   --ngg-accent-active: #b01a65;
