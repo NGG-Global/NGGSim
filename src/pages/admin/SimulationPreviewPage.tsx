@@ -6,6 +6,7 @@ import { RepositoryErrorState, RepositoryLoadingState } from '../../components/R
 import { Button } from '../../components/ui/Button'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { analysisCriterionLabel } from '../../data/analysisCriteria'
+import { brandingStyle } from '../../features/simulations/branding'
 import { toParticipantSimulationView } from '../../services/participantSimulationService'
 import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
 import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
@@ -50,9 +51,10 @@ export function SimulationPreviewPage() {
       </div>
 
       {mode === 'participant' ? (
-        <section className="rounded-3xl border border-[#d9e4df] bg-[#f2f5f1] p-5 sm:p-8">
+        <section className="rounded-3xl border border-[#d9e4df] bg-[#f2f5f1] p-5 sm:p-8" style={brandingStyle(participantView.accentColor)}>
           <div className="mx-auto max-w-3xl">
             <div className="mb-5 flex items-center gap-2 rounded-xl bg-[#dfece7] px-4 py-3 text-sm font-bold text-forest"><Eye className="h-4 w-4" aria-hidden="true" /> זהו כל המידע שיוצג למשתתף לפני השיחה</div>
+            {participantView.logo && <img src={participantView.logo} alt="לוגו הלקוח" className="mb-5 h-12 w-auto max-w-[190px] object-contain" />}
             <ParticipantBriefPanel simulation={participantView} />
           </div>
         </section>
@@ -84,7 +86,7 @@ function FacilitatorPreview({ simulation }: { simulation: Simulation }) {
       <PreviewSection title="מידע פנימי ורגיש" tone="private">
         <Detail label="מידע שאסור להציג למשתתף" value={simulation.scenario.hiddenInfo} />
         <Detail label="מידע מותנה של הדמות" value={simulation.character.conditionalInfo} />
-        <Detail label="הנחיית דמות עתידית" value={simulation.facilitatorConfiguration.futureAgentPrompt} />
+        <Detail label="הנחיות נוספות לדמות" value={simulation.facilitatorConfiguration.futureAgentPrompt} />
         <Detail label="הערות מנחה" value={simulation.facilitatorConfiguration.internalNotes} />
       </PreviewSection>
       <PreviewSection title="התנהגות ותנאי הערכה" tone="private">

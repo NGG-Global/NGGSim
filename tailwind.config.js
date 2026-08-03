@@ -5,10 +5,13 @@ export default {
     extend: {
       colors: {
         ink: '#15151f',
-        forest: '#ec2a8c',
-        sage: '#fdeef6',
+        // forest/coral/sage are the brand accent. They resolve from CSS variables so
+        // the participant side can be re-themed per client; the defaults below (set in
+        // index.css) equal the original NGG hexes, so the admin side is unchanged.
+        forest: 'rgb(var(--c-forest) / <alpha-value>)',
+        sage: 'rgb(var(--c-sage) / <alpha-value>)',
         cream: '#f4f4f6',
-        coral: '#d11e78',
+        coral: 'rgb(var(--c-coral) / <alpha-value>)',
       },
       boxShadow: {
         card: '0 2px 4px rgba(8, 8, 16, 0.06), 0 6px 16px rgba(8, 8, 16, 0.10)',

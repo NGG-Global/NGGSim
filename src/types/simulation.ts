@@ -6,13 +6,16 @@ export interface OrganizationContext {
   audience: string
   context: string
   showOrganizationToParticipant: boolean
+  /** Client brand colour (hex) for the participant-facing pages. Empty = NGG default. */
+  accentColor?: string
+  /** Client logo as a data: URL, shown on the participant-facing pages. */
+  logo?: string
 }
 
 export interface Scenario {
   conversationType: string
   description: string
   priorEvents: string
-  participantGoal: string
   participantKnownInfo: string
   hiddenInfo: string
 }
@@ -42,7 +45,6 @@ export interface CharacterBehavior {
   escalationTriggers: string
   successConditions: string
   failureConditions: string
-  recommendedMinutes: number
   openingLine: string
   endingConditions: string
 }
@@ -174,6 +176,10 @@ export interface ParticipantSimulationView {
   participantFields: ParticipantField[]
   character: Pick<Character, 'name' | 'role'>
   scenarioSummary: string
+  /** Client brand colour (hex) for the participant-facing pages. */
+  accentColor?: string
+  /** Client logo as a data: URL. */
+  logo?: string
 }
 
 export type PublicUnavailableReason = 'not_found' | 'draft' | 'unpublished' | 'deleted' | 'replaced'

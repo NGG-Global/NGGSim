@@ -28,7 +28,6 @@ export function createDemoSimulations(): Simulation[] {
     conversationType: 'שיחת משוב',
     description: 'נועם, איש צוות מנוסה, דוחה משימות תיעוד ומגיב בהתגוננות למשוב בנושא.',
     priorEvents: 'שתי משימות תיעוד הוגשו באיחור בחודש האחרון, ונשלחה תזכורת כללית לצוות.',
-    participantGoal: 'להציג את הפער באופן ברור, להבין את נקודת המבט של נועם ולהסכים על צעד המשך מדיד.',
     participantKnownInfo: 'נועם מקצועי ומוערך, אך עומס העבודה שלו גדל לאחרונה.',
     hiddenInfo: 'נועם מטפל בהורה חולה ואינו רוצה לשתף בכך מיוזמתו. אין לחשוף מידע זה למשתתף.',
   }
@@ -56,7 +55,6 @@ export function createDemoSimulations(): Simulation[] {
     escalationTriggers: 'האשמות, איומים או השוואה לחברי צוות אחרים.',
     successConditions: 'המשתתף מתאר עובדות, מקשיב לסיבה ומסכם צעד מדיד עם מועד בדיקה.',
     failureConditions: 'השיחה מסתיימת באיום, בהאשמה אישית או ללא צעד המשך.',
-    recommendedMinutes: 8,
     openingLine: 'אני מניח שהזמנת אותי בגלל התיעוד. בעיניי זה פשוט לא הדבר הכי דחוף כרגע.',
     endingConditions: 'הסכמה על צעד המשך, הסלמה חריפה או בחירה של המשתתף לסיים.',
   }

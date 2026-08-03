@@ -1,4 +1,4 @@
-import { BarChart3, CheckCircle2, Clock3, Download, MessageSquareText, Users } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock3, Download, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
@@ -9,7 +9,9 @@ import {
   averageScore,
   cohortCriteriaAverages,
   downloadSessionReport,
+  groupSessionsByDate,
   scoreTier,
+  type DateGroup,
 } from '../../features/analytics/sessionReport'
 import { useRepositoryQuery } from '../../hooks/useRepositoryQuery'
 import { useSimulationRepository } from '../../repositories/SimulationRepositoryProvider'
@@ -25,12 +27,14 @@ export function SimulationResultsPage() {
   }, [repository, id])
   const simulation = query.data?.simulation
   const sessions = query.data?.sessions ?? []
+  const reports = query.data?.reports
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = sessions.find((session) => session.id === selectedId) ?? sessions[0]
-  const report = selected ? query.data?.reports.get(selected.id) ?? null : null
+  const report = selected ? reports?.get(selected.id) ?? null : null
 
-  const cohort = cohortCriteriaAverages(sessions.map((session) => query.data?.reports.get(session.id) ?? null))
-  const scoredCount = cohort.length ? Math.max(...cohort.map((entry) => entry.count)) : 0
+  const cohort = cohortCriteriaAverages(sessions.map((session) => reports?.get(session.id) ?? null))
+  const dateGroups = reports ? groupSessionsByDate(sessions, reports) : []
+  const scoredTotal = dateGroups.reduce((total, group) => total + group.scored, 0)
 
   if (query.isLoading && query.data === undefined) return <RepositoryLoadingState label="טוענים ניסיונות ודוחות…" />
   if (query.error) return <RepositoryErrorState error={query.error} onRetry={query.reload} />
@@ -54,15 +58,28 @@ export function SimulationResultsPage() {
         <ResultStat icon={<Clock3 />} label="משך ממוצע" value={averageDuration(sessions.map((session) => session.durationSeconds))} />
       </div>
 
-      {cohort.length > 0 && scoredCount >= 2 && (
+      {cohort.length > 0 && (
         <section className="rounded-3xl border border-[#dce5e1] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold"><BarChart3 className="h-5 w-5 text-forest" aria-hidden="true" /> תמונת מצב קבוצתית</h2>
-            <span className="text-sm text-[#6a807a]">ממוצע לפי קריטריון · {scoredCount} ניסיונות מנותחים</span>
+            <h2 className="flex items-center gap-2 text-lg font-bold"><BarChart3 className="h-5 w-5 text-forest" aria-hidden="true" /> ניתוח קבוצתי</h2>
+            <span className="text-sm text-[#6a807a]">{scoredTotal} ניסיונות מנותחים</span>
           </div>
-          <div className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+
+          <h3 className="mt-6 text-sm font-bold text-[#4f6862]">תמונת־על — ממוצע לכל קריטריון</h3>
+          <div className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
             {cohort.map((entry) => <CriterionBar key={entry.label} label={entry.label} score={entry.score} />)}
           </div>
+
+          <DateTrend groups={dateGroups} />
+
+          {dateGroups.length > 0 && (
+            <>
+              <h3 className="mt-8 text-sm font-bold text-[#4f6862]">פירוט לפי תאריך</h3>
+              <div className="mt-3 space-y-3">
+                {dateGroups.map((group) => <DateGroupCard key={group.key} group={group} />)}
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -78,7 +95,7 @@ export function SimulationResultsPage() {
             <h2 className="px-2 pb-3 text-lg font-bold">רשימת משתתפים</h2>
             <div className="space-y-2">
               {sessions.map((session) => {
-                const sessionReport = query.data?.reports.get(session.id) ?? null
+                const sessionReport = reports?.get(session.id) ?? null
                 const sessionOverall = sessionReport && Object.keys(sessionReport.scores).length ? averageScore(sessionReport.scores) : null
                 return (
                   <button key={session.id} type="button" onClick={() => setSelectedId(session.id)} className={`w-full rounded-2xl border p-4 text-right transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#f7b3d6] ${selected?.id === session.id ? 'border-forest bg-sage' : 'border-[#e0e7e4] hover:bg-[#f7f9f8]'}`}>
@@ -109,6 +126,7 @@ export function SimulationResultsPage() {
                   </div>
                 </div>
                 <p className="mt-5 rounded-2xl bg-[#f5f7f6] p-4 leading-7 text-[#405b55]">{report?.summary ?? 'הדוח יופק לאחר השלמת הניסיון.'}</p>
+                <p className="mt-3 text-xs text-[#8a938f]">התמלול המלא של השיחה זמין בקובץ הדוח להורדה.</p>
               </section>
 
               {report && (
@@ -136,20 +154,6 @@ export function SimulationResultsPage() {
                   </div>
                 </>
               )}
-
-              <section className="rounded-3xl border border-[#dce5e1] bg-white p-6">
-                <h2 className="flex items-center gap-2 text-lg font-bold"><MessageSquareText className="h-5 w-5" aria-hidden="true" /> תמלול השיחה</h2>
-                {selected.transcript.length ? (
-                  <div className="mt-5 space-y-3">
-                    {selected.transcript.map((entry) => (
-                      <div key={entry.id} className={`max-w-[85%] rounded-2xl p-4 ${entry.speaker === 'participant' ? 'mr-auto bg-forest text-white' : 'ml-auto bg-[#edf2ef] text-ink'}`}>
-                        <p className="text-xs font-bold opacity-70">{entry.speaker === 'participant' ? 'המשתתף/ת' : simulation.character.name || 'הדמות'} · {formatDuration(entry.timestampSeconds)}</p>
-                        <p className="mt-1 leading-6">{entry.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p className="mt-3 text-sm text-[#657a74]">אין תמלול לניסיון זה.</p>}
-              </section>
             </div>
           )}
         </div>
@@ -207,6 +211,51 @@ function CriterionBar({ label, score }: { label: string; score: number }) {
 function ScorePill({ value }: { value: number }) {
   const meta = TIER_META[scoreTier(value)]
   return <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums" style={{ backgroundColor: meta.bg, color: meta.text }}>{value}/{SCORE_MAX}</span>
+}
+
+/** Overall-score-per-date columns. In RTL the row reads right→left, so oldest sits on the right. */
+function DateTrend({ groups }: { groups: DateGroup[] }) {
+  const data = groups.filter((group) => group.avgOverall !== null)
+  if (data.length < 2) return null
+  const chronological = [...data].reverse()
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-bold text-[#4f6862]">מגמת ציון כולל לאורך זמן</h3>
+      <div className="mt-4 flex items-end gap-3" style={{ height: 150 }}>
+        {chronological.map((group) => {
+          const value = group.avgOverall as number
+          const meta = TIER_META[scoreTier(value)]
+          const height = Math.max(8, (value / SCORE_MAX) * 118)
+          return (
+            <div key={group.key} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${group.label}: ${value}/${SCORE_MAX} · ${group.scored} מנותחים`}>
+              <span className="text-xs font-bold" style={{ color: meta.color }}>{value}</span>
+              <div className="w-full max-w-[56px] rounded-t-lg" style={{ height, backgroundColor: meta.color }} />
+              <span className="text-[10px] font-bold text-[#6a807a]">{group.shortLabel}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function DateGroupCard({ group }: { group: DateGroup }) {
+  return (
+    <div className="rounded-2xl border border-[#e0e7e4] bg-[#fbfcfb] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="font-bold text-ink">{group.label}</h3>
+          <p className="mt-0.5 text-xs text-[#6a807a]">{group.scored} מנותחים · {group.attempts} ניסיונות · משך ממוצע {formatDuration(group.avgDuration)}</p>
+        </div>
+        {group.avgOverall !== null && <ScorePill value={group.avgOverall} />}
+      </div>
+      {group.criteria.length > 0 ? (
+        <div className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+          {group.criteria.map((entry) => <CriterionBar key={entry.label} label={entry.label} score={entry.score} />)}
+        </div>
+      ) : <p className="mt-3 text-sm text-[#6a807a]">אין עדיין ניתוח לתאריך זה.</p>}
+    </div>
+  )
 }
 
 function ListCard({ title, items, tone }: { title: string; items: string[]; tone: 'positive' | 'improve' }) {

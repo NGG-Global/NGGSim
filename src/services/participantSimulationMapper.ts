@@ -21,5 +21,8 @@ export function toParticipantSimulationView(simulation: Simulation): Participant
       role: simulation.character.role,
     },
     scenarioSummary: simulation.participantBrief.situationDescription,
+    // Client branding is intentionally shown to the participant.
+    accentColor: simulation.organization.accentColor || undefined,
+    logo: simulation.organization.logo || undefined,
   }
 }
