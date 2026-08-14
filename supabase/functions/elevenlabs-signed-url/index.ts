@@ -11,8 +11,10 @@
 // Secrets (Dashboard -> Edge Functions -> Secrets):
 //   ELEVENLABS_API_KEY     (ElevenAgents Read + Write)
 //   ELEVENLABS_AGENT_ID    (agent_...)
-//   ELEVENLABS_VOICE_MALE   (optional ElevenLabs voice id for male characters)
-//   ELEVENLABS_VOICE_FEMALE (optional ElevenLabs voice id for female characters)
+//   ELEVENLABS_VOICE_MALE   (ElevenLabs voice id for male characters)
+//   ELEVENLABS_VOICE_FEMALE (ElevenLabs voice id for female characters)
+// Both voice ids are technically optional, but with either one missing that gender
+// falls back to the base agent's voice and the distinction becomes inaudible.
 // SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
 const CORS = {
@@ -29,9 +31,82 @@ function text(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// Returns null (not '') when there is no value, so that buildSystemPrompt can drop
+// empty labels while keeping the intentional '' entries as blank separator lines.
 function line(label, value) {
   const v = text(value);
-  return v ? `${label}: ${v}` : '';
+  return v ? `${label}: ${v}` : null;
+}
+
+// `character.voiceGender` is the single switch that makes a character male or female,
+// and it drives TWO things, not one:
+//   1) the TTS voice id (see pickVoiceId), and
+//   2) the grammatical gender of this entire prompt (see VOICE_PACKS).
+// Hebrew marks gender on verbs, participles, adjectives and pronouns. A model that is
+// addressed throughout in masculine forms ("אתה מגלם", "דבר", "אתה יודע") drifts into
+// masculine self-reference even when the character is a woman. So every fixed sentence
+// and every label is conjugated to the character's own gender, and the agreement rule
+// is stated explicitly at the top of the prompt and restated at the end.
+const VOICE_PACKS = {
+  male: {
+    intro:
+      'אתה מגלם דמות בסימולציית אימון בשפה העברית. דבר עברית בלבד, בגוף ראשון, והישאר תמיד בדמות. אל תגלה שאתה בינה מלאכותית. שמור על תגובות טבעיות, קצרות וזורמות כמו בשיחה מדוברת.',
+    genderRule: [
+      'התאם דקדוקי — הנחיה מחייבת שאין לחרוג ממנה:',
+      'הדמות שאתה מגלם היא גבר. דבר על עצמך תמיד בלשון זכר, בכל משפט ובכל זמן.',
+      'השתמש בצורות זכר בכל התייחסות לעצמך: "אני חושב", "אני מרגיש", "אני יודע", "אני מבין", "אני לא מסכים", "אני מתוסכל", "אני בטוח", "הייתי צריך", "אני עושה", "אני מנסה".',
+      'לעולם אל תשתמש בצורת נקבה כשאתה מדבר על עצמך.',
+      'אם נסחפת בטעות לצורת נקבה, המשך מיד בצורת זכר. אל תתקן את עצמך בקול ואל תתייחס לכך.',
+    ].join('\n'),
+    characterHeader: 'הדמות שאתה מגלם:',
+    freelySharedLabel: 'מידע שאתה מוכן לחשוף בחופשיות',
+    conditionalLabel: 'מידע שתחשוף רק אם נוצרים התנאים המתאימים',
+    hiddenLabel:
+      'מידע רגיש שאתה יודע אך אינך חושף ביוזמתך (חשוף רק אם נבנה אמון או נשאלת שאלה מתאימה, ולעולם לא באופן ישיר בתחילת השיחה)',
+    calmDown: 'אתה יכול להירגע במהלך השיחה אם המשתתף מגיב באמפתיה ובהקשבה.',
+    successLabel: 'סימנים לכך שהשיחה מתקדמת היטב ואתה יכול לרכך את עמדתך',
+    failureLabel: 'סימנים לכך שהשיחה אינה מתקדמת ואתה נעשה נוקשה יותר',
+    addressing: [
+      'פנייה למשתתף:',
+      'אינך יודע אם המשתתף שמולך גבר או אישה, ואין להניח זאת. עד שהדבר מתברר מהשיחה עצמה, העדף פנייה ישירה וניטרלית.',
+      'אם במהלך השיחה מתברר באיזו לשון המשתתף מדבר על עצמו, התאם את הפנייה אליו בהתאם.',
+      'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקרא צורות כאלה בקול ואל תשתמש בהן בשיחה — בחר תמיד צורה אחת טבעית.',
+    ].join('\n'),
+    genderReminder: 'זכור לאורך כל השיחה: אתה גבר ומדבר על עצמך בלשון זכר בלבד.',
+  },
+  female: {
+    intro:
+      'את מגלמת דמות בסימולציית אימון בשפה העברית. דברי עברית בלבד, בגוף ראשון, והישארי תמיד בדמות. אל תגלי שאת בינה מלאכותית. שמרי על תגובות טבעיות, קצרות וזורמות כמו בשיחה מדוברת.',
+    genderRule: [
+      'התאם דקדוקי — הנחיה מחייבת שאין לחרוג ממנה:',
+      'הדמות שאת מגלמת היא אישה. דברי על עצמך תמיד בלשון נקבה, בכל משפט ובכל זמן.',
+      'השתמשי בצורות נקבה בכל התייחסות לעצמך: "אני חושבת", "אני מרגישה", "אני יודעת", "אני מבינה", "אני לא מסכימה", "אני מתוסכלת", "אני בטוחה", "הייתי צריכה", "אני עושה", "אני מנסה".',
+      'לעולם אל תשתמשי בצורת זכר כשאת מדברת על עצמך.',
+      'אם נסחפת בטעות לצורת זכר, המשיכי מיד בצורת נקבה. אל תתקני את עצמך בקול ואל תתייחסי לכך.',
+    ].join('\n'),
+    characterHeader: 'הדמות שאת מגלמת:',
+    freelySharedLabel: 'מידע שאת מוכנה לחשוף בחופשיות',
+    conditionalLabel: 'מידע שתחשפי רק אם נוצרים התנאים המתאימים',
+    hiddenLabel:
+      'מידע רגיש שאת יודעת אך אינך חושפת ביוזמתך (חשפי רק אם נבנה אמון או נשאלת שאלה מתאימה, ולעולם לא באופן ישיר בתחילת השיחה)',
+    calmDown: 'את יכולה להירגע במהלך השיחה אם המשתתף מגיב באמפתיה ובהקשבה.',
+    successLabel: 'סימנים לכך שהשיחה מתקדמת היטב ואת יכולה לרכך את עמדתך',
+    failureLabel: 'סימנים לכך שהשיחה אינה מתקדמת ואת נעשית נוקשה יותר',
+    // The character speaks about itself in its own gender, but it does NOT know the
+    // participant's gender, and the facilitator's fields are written with slash forms
+    // ("מנהל/ת", "יודע/ת") that must never be voiced as written.
+    addressing: [
+      'פנייה למשתתף:',
+      'אינך יודעת אם המשתתף שמולך גבר או אישה, ואין להניח זאת. עד שהדבר מתברר מהשיחה עצמה, העדיפי פנייה ישירה וניטרלית.',
+      'אם במהלך השיחה מתברר באיזו לשון המשתתף מדבר על עצמו, התאימי את הפנייה אליו בהתאם.',
+      'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקראי צורות כאלה בקול ואל תשתמשי בהן בשיחה — בחרי תמיד צורה אחת טבעית.',
+    ].join('\n'),
+    genderReminder: 'זכרי לאורך כל השיחה: את אישה ומדברת על עצמך בלשון נקבה בלבד.',
+  },
+};
+
+function voicePack(sim) {
+  return sim.character && sim.character.voiceGender === 'male' ? VOICE_PACKS.male : VOICE_PACKS.female;
 }
 
 // Build the Hebrew system prompt for the character from the full simulation.
@@ -40,12 +115,17 @@ function buildSystemPrompt(sim) {
   const s = sim.scenario ?? {};
   const b = sim.behavior ?? {};
   const f = sim.facilitator_configuration ?? {};
+  const g = voicePack(sim);
   const traits = Array.isArray(c.personalityTraits) ? c.personalityTraits.filter(Boolean).join(', ') : '';
 
   const parts = [
-    'אתה מגלם דמות בסימולציית אימון בשפה העברית. דבר עברית בלבד, בגוף ראשון, והישאר תמיד בדמות. אל תגלה שאתה בינה מלאכותית. שמור על תגובות טבעיות, קצרות וזורמות כמו בשיחה מדוברת.',
+    g.intro,
     '',
-    'הדמות שאתה מגלם:',
+    g.genderRule,
+    '',
+    g.addressing,
+    '',
+    g.characterHeader,
     line('שם', c.name),
     line('תפקיד', c.role),
     line('הקשר למשתתף', c.relationToParticipant),
@@ -63,31 +143,41 @@ function buildSystemPrompt(sim) {
     line('רקע', s.description),
     line('מה קרה לפני השיחה', s.priorEvents),
     '',
-    line('מידע שאתה מוכן לחשוף בחופשיות', c.freelySharedInfo),
-    line('מידע שתחשוף רק אם נוצרים התנאים המתאימים', c.conditionalInfo),
-    line('מידע רגיש שאתה יודע אך אינך חושף ביוזמתך (חשוף רק אם נבנה אמון או נשאלת שאלה מתאימה, ולעולם לא באופן ישיר בתחילת השיחה)', s.hiddenInfo),
+    line(g.freelySharedLabel, c.freelySharedInfo),
+    line(g.conditionalLabel, c.conditionalInfo),
+    line(g.hiddenLabel, s.hiddenInfo),
     '',
     'אופן ההתנהגות:',
     line('רמת קושי', b.difficulty),
     line('מידת התנגדות', b.resistance),
-    b.canCalmDown ? 'אתה יכול להירגע במהלך השיחה אם המשתתף מגיב באמפתיה ובהקשבה.' : '',
+    b.canCalmDown ? g.calmDown : null,
     line('מה גורם לך להיפתח', b.openingTriggers),
     line('מה גורם להסלמה מצדך', b.escalationTriggers),
-    line('סימנים לכך שהשיחה מתקדמת היטב ואתה יכול לרכך את עמדתך', b.successConditions),
-    line('סימנים לכך שהשיחה אינה מתקדמת ואתה נעשה נוקשה יותר', b.failureConditions),
+    line(g.successLabel, b.successConditions),
+    line(g.failureLabel, b.failureConditions),
     line('כיצד השיחה יכולה להסתיים באופן טבעי', b.endingConditions),
     '',
     line('הנחיות נוספות מהמנחה', f.futureAgentPrompt),
+    '',
+    g.genderReminder,
   ];
 
-  return parts.filter((p) => p !== '').join('\n');
+  // Drop empty labels, keep the '' separators, and collapse the runs of blank lines
+  // that appear when a whole section was left unfilled.
+  return parts.filter((p) => p !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Without both secrets configured, every character falls back to the base agent's
+// voice and the male/female distinction becomes inaudible — so log the gap loudly.
 function pickVoiceId(sim) {
   const gender = sim.character && sim.character.voiceGender === 'male' ? 'male' : 'female';
   const male = text(Deno.env.get('ELEVENLABS_VOICE_MALE'));
   const female = text(Deno.env.get('ELEVENLABS_VOICE_FEMALE'));
-  return gender === 'male' ? male : female;
+  const voiceId = gender === 'male' ? male : female;
+  if (!voiceId) {
+    console.warn(`no voice id configured for ${gender} character; falling back to the base agent voice`);
+  }
+  return voiceId;
 }
 
 Deno.serve(async (req) => {
