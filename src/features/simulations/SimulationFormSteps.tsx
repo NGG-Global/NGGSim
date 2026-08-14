@@ -119,7 +119,7 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
           <TextField label="תפקיד הדמות" value={simulation.character.role} onChange={(event) => updateCharacter({ role: event.target.value })} />
           <TextField label="הקשר שלה למשתתף" value={simulation.character.relationToParticipant} onChange={(event) => updateCharacter({ relationToParticipant: event.target.value })} placeholder="לדוגמה: עובד ישיר בצוות" />
           <TextField label="מצב רגשי בתחילת השיחה" value={simulation.character.initialEmotionalState} onChange={(event) => updateCharacter({ initialEmotionalState: event.target.value })} />
-          <SelectField label="קול הדמות" hint="בחירת קול נשי או גברי לדמות בשיחה הקולית." value={simulation.character.voiceGender} onChange={(event) => updateCharacter({ voiceGender: event.target.value as Simulation['character']['voiceGender'] })}>
+          <SelectField label="קול הדמות" hint="קובע גם את הקול בשיחה וגם את המין הדקדוקי של הדמות: דמות בקול גברי מדברת על עצמה בלשון זכר, ודמות בקול נשי בלשון נקבה. יש לוודא שמשפט הפתיחה וסגנון הדיבור נכתבו באותו מין." value={simulation.character.voiceGender} onChange={(event) => updateCharacter({ voiceGender: event.target.value as Simulation['character']['voiceGender'] })}>
             <option value="female">קול נשי</option>
             <option value="male">קול גברי</option>
           </SelectField>
