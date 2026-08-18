@@ -38,6 +38,41 @@ function line(label, value) {
   return v ? `${label}: ${v}` : null;
 }
 
+function firstName(value) {
+  const v = text(value);
+  return v ? v.split(/\s+/)[0] : '';
+}
+
+// The participant types this value into a public form, so it is untrusted text that
+// would otherwise land inside the system prompt. Only the first name is used — a single
+// short word cannot carry a smuggled instruction — and anything that is not shaped like
+// a name is dropped, in which case the character is told it does not know the name.
+const NAME_SHAPE = /^[\u0590-\u05FFa-zA-Z][\u0590-\u05FFa-zA-Z'\u05F3\u2019-]{0,23}$/;
+
+function participantFirstName(value) {
+  const candidate = firstName(value).replace(/[.,:;!?]+$/, '');
+  return NAME_SHAPE.test(candidate) ? candidate : '';
+}
+
+// The character's own name is the only proper noun the model is handed, so whenever it
+// reaches for a way to address the person in front of it, that name is the nearest thing
+// available — which is exactly how a simulation ends up calling the participant by the
+// character's name. Two things prevent it: the name is bound explicitly to the character
+// ("this is YOUR name, not theirs"), and the participant's own first name is supplied as
+// the only legitimate alternative. The rule is stated in first position, before the
+// character details, and restated as the closing line of the prompt.
+function namingLines(own, guest, pack) {
+  const name = text(own);
+  const first = firstName(name);
+  return [
+    'שמות בשיחה — הנחיה מחייבת שאין לחרוג ממנה:',
+    name ? pack.ownName(name, first) : pack.noOwnName,
+    guest ? pack.guestName(guest) : pack.noGuestName,
+    pack.introduced,
+    pack.otherNames,
+  ].join('\n');
+}
+
 // `character.voiceGender` is the single switch that makes a character male or female,
 // and it drives TWO things, not one:
 //   1) the TTS voice id (see pickVoiceId), and
@@ -73,6 +108,20 @@ const VOICE_PACKS = {
       'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקרא צורות כאלה בקול ואל תשתמש בהן בשיחה — בחר תמיד צורה אחת טבעית.',
     ].join('\n'),
     genderReminder: 'זכור לאורך כל השיחה: אתה גבר ומדבר על עצמך בלשון זכר בלבד.',
+    naming: (own, guest) => namingLines(own, guest, {
+      ownName: (name, first) => `"${name}" הוא שמך שלך, שם הדמות שאתה מגלם, ואתה מציג את עצמך בשם הזה.`
+        + ` לעולם אל תפנה למשתתף בשם "${first}" ואל תשתמש בו כדי לתאר אותו — זה שמך, לא שמו.`,
+      noOwnName: 'לדמות שאתה מגלם אין שם מוגדר. אל תמציא לעצמך שם.',
+      guestName: (name) => `שם המשתתף שמולך הוא "${name}". זה השם היחיד שבו מותר לך לפנות אליו.`,
+      noGuestName: 'שם המשתתף אינו ידוע לך. אל תמציא לו שם ואל תפנה אליו בשם כלשהו — פנה אליו ישירות, בלי שם.',
+      introduced: 'אם המשתתף מציג את עצמו בשם, השתמש מכאן והלאה בשם שהוא אמר.',
+      otherNames: 'כל שם נוסף שמופיע בהנחיות שלהלן שייך לך או לאדם שאינו נוכח בשיחה, ולא למשתתף.',
+    }),
+    nameReminder: (own, guest) => {
+      const first = firstName(own);
+      if (!first) return null;
+      return `זכור: "${first}" הוא שמך שלך. ` + (guest ? `שם המשתתף הוא "${guest}".` : 'אל תפנה למשתתף בשם.');
+    },
   },
   female: {
     intro:
@@ -102,6 +151,20 @@ const VOICE_PACKS = {
       'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקראי צורות כאלה בקול ואל תשתמשי בהן בשיחה — בחרי תמיד צורה אחת טבעית.',
     ].join('\n'),
     genderReminder: 'זכרי לאורך כל השיחה: את אישה ומדברת על עצמך בלשון נקבה בלבד.',
+    naming: (own, guest) => namingLines(own, guest, {
+      ownName: (name, first) => `"${name}" הוא שמך שלך, שם הדמות שאת מגלמת, ואת מציגה את עצמך בשם הזה.`
+        + ` לעולם אל תפני למשתתף בשם "${first}" ואל תשתמשי בו כדי לתאר אותו — זה שמך, לא שמו.`,
+      noOwnName: 'לדמות שאת מגלמת אין שם מוגדר. אל תמציאי לעצמך שם.',
+      guestName: (name) => `שם המשתתף שמולך הוא "${name}". זה השם היחיד שבו מותר לך לפנות אליו.`,
+      noGuestName: 'שם המשתתף אינו ידוע לך. אל תמציאי לו שם ואל תפני אליו בשם כלשהו — פני אליו ישירות, בלי שם.',
+      introduced: 'אם המשתתף מציג את עצמו בשם, השתמשי מכאן והלאה בשם שהוא אמר.',
+      otherNames: 'כל שם נוסף שמופיע בהנחיות שלהלן שייך לך או לאדם שאינו נוכח בשיחה, ולא למשתתף.',
+    }),
+    nameReminder: (own, guest) => {
+      const first = firstName(own);
+      if (!first) return null;
+      return `זכרי: "${first}" הוא שמך שלך. ` + (guest ? `שם המשתתף הוא "${guest}".` : 'אל תפני למשתתף בשם.');
+    },
   },
 };
 
@@ -110,23 +173,28 @@ function voicePack(sim) {
 }
 
 // Build the Hebrew system prompt for the character from the full simulation.
-function buildSystemPrompt(sim) {
+// `participantName` is the name the participant typed on the landing page (may be empty
+// for an anonymous simulation); only its sanitized first name reaches the prompt.
+function buildSystemPrompt(sim, participantName) {
   const c = sim.character ?? {};
   const s = sim.scenario ?? {};
   const b = sim.behavior ?? {};
   const f = sim.facilitator_configuration ?? {};
   const g = voicePack(sim);
   const traits = Array.isArray(c.personalityTraits) ? c.personalityTraits.filter(Boolean).join(', ') : '';
+  const guest = participantFirstName(participantName);
 
   const parts = [
     g.intro,
+    '',
+    g.naming(c.name, guest),
     '',
     g.genderRule,
     '',
     g.addressing,
     '',
     g.characterHeader,
-    line('שם', c.name),
+    line('שמך', c.name),
     line('תפקיד', c.role),
     line('הקשר למשתתף', c.relationToParticipant),
     line('מצב רגשי בתחילת השיחה', c.initialEmotionalState),
@@ -160,6 +228,7 @@ function buildSystemPrompt(sim) {
     line('הנחיות נוספות מהמנחה', f.futureAgentPrompt),
     '',
     g.genderReminder,
+    g.nameReminder(c.name, guest),
   ];
 
   // Drop empty labels, keep the '' separators, and collapse the runs of blank lines
@@ -225,7 +294,12 @@ Deno.serve(async (req) => {
         const rows = await simResponse.json();
         const sim = Array.isArray(rows) ? rows[0] : null;
         if (sim) {
-          const agent = { prompt: { prompt: buildSystemPrompt(sim) }, language: 'he' };
+          // `details` is keyed by participant-field type; `fullName` is absent when the
+          // simulation collects no name, and the prompt then tells the character so.
+          const participantName = session.participant && session.participant.details
+            ? session.participant.details.fullName
+            : '';
+          const agent = { prompt: { prompt: buildSystemPrompt(sim, participantName) }, language: 'he' };
           const opening = sim.behavior && text(sim.behavior.openingLine);
           if (opening) agent.firstMessage = opening;
           overrides = { agent };
@@ -256,3 +330,6 @@ Deno.serve(async (req) => {
 
   return json({ signedUrl, overrides });
 });
+
+// Exported for unit tests; the Edge Function entry point is the Deno.serve handler above.
+export { buildSystemPrompt, participantFirstName };

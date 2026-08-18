@@ -115,7 +115,7 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
     return (
       <StepSection number="ג" title="דמות ה־AI" description="בנו דמות עקבית ואמינה. מידע זה לא יוצג למשתתף.">
         <div className="form-grid">
-          <TextField label="שם הדמות" required value={simulation.character.name} onChange={(event) => updateCharacter({ name: event.target.value })} />
+          <TextField label="שם הדמות" required hint="השם שבו הדמות מציגה את עצמה. הדמות מונחית במפורש שזה שמה שלה ושאין לפנות בו למשתתף." value={simulation.character.name} onChange={(event) => updateCharacter({ name: event.target.value })} />
           <TextField label="תפקיד הדמות" value={simulation.character.role} onChange={(event) => updateCharacter({ role: event.target.value })} />
           <TextField label="הקשר שלה למשתתף" value={simulation.character.relationToParticipant} onChange={(event) => updateCharacter({ relationToParticipant: event.target.value })} placeholder="לדוגמה: עובד ישיר בצוות" />
           <TextField label="מצב רגשי בתחילת השיחה" value={simulation.character.initialEmotionalState} onChange={(event) => updateCharacter({ initialEmotionalState: event.target.value })} />
@@ -210,6 +210,7 @@ export function SimulationFormSteps({ step, simulation, onChange }: Props) {
     }
     return (
       <StepSection number="ו" title="פרטי המשתתף" description="בחרו אילו פרטים יידרשו לפני הכניסה. בשלב זה הפרטים אינם מאומתים.">
+        <p className="form-hint">כאשר השדה "שם מלא" מוצג, השם הפרטי של המשתתף נמסר לדמות כדי שתפנה אליו בשמו. בהשתתפות אנונימית הדמות מונחית לפנות למשתתף בלי שם כלל.</p>
         <div className="space-y-3">
           {simulation.participantFields.map((field) => (
             <div key={field.id} className="grid items-center gap-3 rounded-2xl border border-[#dce5e1] bg-white p-4 sm:grid-cols-[1fr_auto_auto]">

@@ -28,6 +28,15 @@ Set under Dashboard → **Edge Functions** → **Secrets**:
 - `elevenlabs-signed-url` — validates a participant session capability, builds the
   per-simulation character overrides (service role), and returns a short-lived
   ElevenLabs signed WebSocket URL. "Verify JWT" OFF.
+
+  The system prompt opens and closes with a naming rule: the character's name is bound
+  explicitly to the character ("this is your own name, never the participant's"), and the
+  participant's first name — taken from the `fullName` participant field when the
+  simulation collects it — is given as the only name the character may use for the
+  person in front of it. When no name is collected, the character is told to address the
+  participant without any name rather than reach for one. Only the first word of the
+  typed name reaches the prompt, and only when it is shaped like a name, so a sentence
+  typed into that field cannot ride into the system prompt.
 - `elevenlabs-postcall` — post-call webhook. Verifies the ElevenLabs signature,
   matches the analysis to our session via the `ngg_session_id` dynamic variable, and
   stores the report. "Verify JWT" OFF. Extra secret: `ELEVENLABS_WEBHOOK_SECRET`.
