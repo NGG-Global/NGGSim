@@ -222,7 +222,7 @@ export class SupabaseSimulationRepository implements SimulationRepository {
     return session
   }
 
-  async requestVoiceSignedUrl(sessionId: string): Promise<VoiceSessionConfig> {
+  async requestVoiceSession(sessionId: string): Promise<VoiceSessionConfig> {
     this.requireClient()
     if (!this.supabaseUrl) {
       throw new RepositoryError('כתובת Supabase הציבורית אינה מוגדרת, ולכן לא ניתן להתחיל שיחה קולית.', 'configuration')
@@ -247,11 +247,17 @@ export class SupabaseSimulationRepository implements SimulationRepository {
       const detail = info && (typeof info.detail === 'string' || typeof info.detail === 'number') ? ` ${info.detail}` : ''
       throw new RepositoryError(`לא הצלחנו להתחיל את השיחה הקולית (${code}${detail}). נסו שוב או פנו למנחה.`, 'unknown')
     }
-    const data = (await response.json().catch(() => null)) as { signedUrl?: unknown; overrides?: unknown } | null
-    if (!data || typeof data.signedUrl !== 'string' || !data.signedUrl) {
-      throw new RepositoryError('השרת לא החזיר כתובת שיחה תקפה.', 'unknown')
+    const data = (await response.json().catch(() => null)) as
+      { conversationToken?: unknown; signedUrl?: unknown; overrides?: unknown } | null
+    const conversationToken = data && typeof data.conversationToken === 'string' ? data.conversationToken : ''
+    const signedUrl = data && typeof data.signedUrl === 'string' ? data.signedUrl : ''
+    if (!conversationToken && !signedUrl) {
+      throw new RepositoryError('השרת לא החזיר הרשאת שיחה תקפה.', 'unknown')
     }
-    return { signedUrl: data.signedUrl, overrides: data.overrides }
+    // Prefer WebRTC when the server managed to mint a token for it.
+    return conversationToken
+      ? { conversationToken, overrides: data?.overrides }
+      : { signedUrl, overrides: data?.overrides }
   }
 
   async getSession(id: string): Promise<SimulationSession | null> {

@@ -93,6 +93,22 @@ describe('character naming rules in the system prompt', () => {
     expect(prompt).toContain('זכור: "אורי" הוא שמך שלך. שם המשתתף הוא "רונית".')
   })
 
+  it('tells the character how to behave in silence, in its own gender', () => {
+    const female = buildSystemPrompt(simulation(), 'יוסי')
+    expect(female).toContain('התנהלות בשתיקה או בתקלה טכנית:')
+    expect(female).toContain('אל תחזרי על אותו משפט בדיקה פעמיים ואל תשאלי שוב ושוב אם שומעים אותך.')
+    expect(female).toContain('אל תנהלי שיחה עם עצמך')
+
+    const male = buildSystemPrompt(simulation({ character: { name: 'אורי', voiceGender: 'male', personalityTraits: [] } }), 'יוסי')
+    expect(male).toContain('אל תחזור על אותו משפט בדיקה פעמיים ואל תשאל שוב ושוב אם שומעים אותך.')
+    expect(male).toContain('אל תנהל שיחה עם עצמך')
+  })
+
+  it('states the silence policy before the character details', () => {
+    const prompt = buildSystemPrompt(simulation(), 'יוסי')
+    expect(prompt.indexOf('התנהלות בשתיקה')).toBeLessThan(prompt.indexOf('הדמות שאת מגלמת:'))
+  })
+
   it('does not invent a name when the character has none', () => {
     const sim = simulation({ character: { name: '', voiceGender: 'female', personalityTraits: [] } })
     const prompt = buildSystemPrompt(sim, 'יוסי')

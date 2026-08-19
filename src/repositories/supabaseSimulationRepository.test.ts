@@ -484,4 +484,53 @@ describe('SupabaseSimulationRepository sessions/reports', () => {
   })
 })
 
+describe('voice session credentials', () => {
+  const SESSION_ID = '11111111-1111-4111-8111-111111111111'
+  const ACCESS_TOKEN = 'a'.repeat(64)
+
+  function repositoryWithSession() {
+    window.sessionStorage.setItem(`simulab.supabase-session-access.${SESSION_ID}`, ACCESS_TOKEN)
+    const fake = createFakeClient({})
+    return new SupabaseSimulationRepository(fake.client, 'https://pilot.example', 'https://db.example')
+  }
+
+  function mockEdgeResponse(body: unknown, ok = true) {
+    const fetchMock = vi.fn(async () => ({ ok, status: ok ? 200 : 502, json: async () => body }) as unknown as Response)
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  // WebRTC recovers from a brief network drop on its own, so it must win whenever the
+  // server managed to mint a token for it.
+  it('prefers the WebRTC token over a signed URL', async () => {
+    mockEdgeResponse({ conversationToken: 'tok_123', signedUrl: 'wss://legacy', overrides: { agent: {} } })
+    await expect(repositoryWithSession().requestVoiceSession(SESSION_ID)).resolves.toEqual({
+      conversationToken: 'tok_123',
+      overrides: { agent: {} },
+    })
+  })
+
+  it('falls back to the signed URL when no token was minted', async () => {
+    mockEdgeResponse({ signedUrl: 'wss://fallback', overrides: undefined })
+    await expect(repositoryWithSession().requestVoiceSession(SESSION_ID)).resolves.toEqual({
+      signedUrl: 'wss://fallback',
+      overrides: undefined,
+    })
+  })
+
+  it('rejects a response that carries no credential at all', async () => {
+    mockEdgeResponse({ overrides: {} })
+    await expect(repositoryWithSession().requestVoiceSession(SESSION_ID)).rejects
+      .toEqual(expect.objectContaining<Partial<RepositoryError>>({ code: 'unknown' }))
+  })
+
+  it('refuses to start a call without a stored session capability', async () => {
+    mockEdgeResponse({ conversationToken: 'tok_123' })
+    const fake = createFakeClient({})
+    const repository = new SupabaseSimulationRepository(fake.client, 'https://pilot.example', 'https://db.example')
+    await expect(repository.requestVoiceSession('22222222-2222-4222-8222-222222222222')).rejects
+      .toEqual(expect.objectContaining<Partial<RepositoryError>>({ code: 'forbidden' }))
+  })
+})
+
 export { createFakeClient, publishableRow, sessionRow, shareLinkRow, simulationRow, success }

@@ -188,9 +188,15 @@ export type PublicSimulationResult =
   | { state: 'available'; simulation: ParticipantSimulationView }
   | { state: 'unavailable'; reason: PublicUnavailableReason }
 
-/** Result of requesting a live voice session: the signed URL and optional server-built agent overrides. */
+/**
+ * Result of requesting a live voice session: one credential plus the server-built agent
+ * overrides. `conversationToken` means the WebRTC transport, which recovers on its own from
+ * a brief network drop; `signedUrl` means the WebSocket transport, which does not, and is
+ * kept as a fallback for when the token endpoint is unavailable. Exactly one is set.
+ */
 export interface VoiceSessionConfig {
-  signedUrl: string
+  conversationToken?: string
+  signedUrl?: string
   overrides?: unknown
 }
 
@@ -207,8 +213,8 @@ export interface SimulationRepository {
   remove(id: string): Promise<void>
   lookupPublicToken(token: string): Promise<PublicSimulationResult>
   createSession(token: string, details: Record<string, string>, idempotencyKey?: string): Promise<SimulationSession>
-  /** Returns the ElevenLabs signed WebSocket URL plus server-built character overrides for an active session. */
-  requestVoiceSignedUrl(sessionId: string): Promise<VoiceSessionConfig>
+  /** Returns an ElevenLabs voice credential plus server-built character overrides for an active session. */
+  requestVoiceSession(sessionId: string): Promise<VoiceSessionConfig>
   getSession(id: string): Promise<SimulationSession | null>
   listSessions(simulationId: string): Promise<SimulationSession[]>
   updateSessionProgress(id: string, patch: Partial<Pick<SimulationSession, 'durationSeconds' | 'conversationState' | 'transcript'>>): Promise<SimulationSession>

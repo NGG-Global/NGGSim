@@ -1,9 +1,15 @@
 // Supabase Edge Function: elevenlabs-signed-url
 //
 // Validates a participant session capability, then returns:
-//   - a short-lived ElevenLabs signed WebSocket URL for the base agent, and
+//   - a short-lived ElevenLabs call credential for the base agent, and
 //   - `overrides` that turn the base agent into THIS simulation's character
 //     (system prompt, first message, language, voice), built server-side.
+//
+// The credential is a WebRTC `conversationToken` when ElevenLabs can mint one, because
+// that transport recovers from a brief network drop by itself. A signed WebSocket URL is
+// returned as the fallback; that transport has no reconnection logic, so a participant
+// whose network blinks is left with a call that cannot come back. Both transports carry
+// the same initiation payload, so the overrides apply either way.
 //
 // The ElevenLabs API key and the full simulation (incl. hidden info) stay on the
 // server; only the built overrides are returned to the authorized participant.
@@ -107,6 +113,17 @@ const VOICE_PACKS = {
       'אם במהלך השיחה מתברר באיזו לשון המשתתף מדבר על עצמו, התאם את הפנייה אליו בהתאם.',
       'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקרא צורות כאלה בקול ואל תשתמש בהן בשיחה — בחר תמיד צורה אחת טבעית.',
     ].join('\n'),
+    // Without a silence policy the model fills dead air, and "היי, אתה שומע אותי?" is its
+    // default filler. Once that sentence is in the history twice, repetition feeds itself
+    // and the call reads as a stuck agent — which is what a participant reports, even when
+    // the real fault is a dropped socket or a microphone the browser stopped capturing.
+    silencePolicy: [
+      'התנהלות בשתיקה או בתקלה טכנית:',
+      'אם אינך מקבל תגובה מהמשתתף, המתן בשקט. אחרי המתנה ארוכה אמור משפט בדיקה קצר אחד, ואז המתן שוב.',
+      'אל תחזור על אותו משפט בדיקה פעמיים ואל תשאל שוב ושוב אם שומעים אותך.',
+      'אם גם אחרי כן אין תגובה, המתן בלי לדבר. אל תנהל שיחה עם עצמך ואל תמשיך את התרגול בלי המשתתף.',
+      'אל תתייחס לתקלות טכניות מעבר לכך ואל תצא מהדמות כדי לטפל בהן.',
+    ].join('\n'),
     genderReminder: 'זכור לאורך כל השיחה: אתה גבר ומדבר על עצמך בלשון זכר בלבד.',
     naming: (own, guest) => namingLines(own, guest, {
       ownName: (name, first) => `"${name}" הוא שמך שלך, שם הדמות שאתה מגלם, ואתה מציג את עצמך בשם הזה.`
@@ -150,6 +167,13 @@ const VOICE_PACKS = {
       'אם במהלך השיחה מתברר באיזו לשון המשתתף מדבר על עצמו, התאימי את הפנייה אליו בהתאם.',
       'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקראי צורות כאלה בקול ואל תשתמשי בהן בשיחה — בחרי תמיד צורה אחת טבעית.',
     ].join('\n'),
+    silencePolicy: [
+      'התנהלות בשתיקה או בתקלה טכנית:',
+      'אם אינך מקבלת תגובה מהמשתתף, המתיני בשקט. אחרי המתנה ארוכה אמרי משפט בדיקה קצר אחד, ואז המתיני שוב.',
+      'אל תחזרי על אותו משפט בדיקה פעמיים ואל תשאלי שוב ושוב אם שומעים אותך.',
+      'אם גם אחרי כן אין תגובה, המתיני בלי לדבר. אל תנהלי שיחה עם עצמך ואל תמשיכי את התרגול בלי המשתתף.',
+      'אל תתייחסי לתקלות טכניות מעבר לכך ואל תצאי מהדמות כדי לטפל בהן.',
+    ].join('\n'),
     genderReminder: 'זכרי לאורך כל השיחה: את אישה ומדברת על עצמך בלשון נקבה בלבד.',
     naming: (own, guest) => namingLines(own, guest, {
       ownName: (name, first) => `"${name}" הוא שמך שלך, שם הדמות שאת מגלמת, ואת מציגה את עצמך בשם הזה.`
@@ -192,6 +216,8 @@ function buildSystemPrompt(sim, participantName) {
     g.genderRule,
     '',
     g.addressing,
+    '',
+    g.silencePolicy,
     '',
     g.characterHeader,
     line('שמך', c.name),
@@ -314,9 +340,27 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 3) Ask ElevenLabs for a short-lived signed URL for the base agent.
+  // 3) Ask ElevenLabs for a call credential: a WebRTC token first, a signed URL second.
+  const agentQuery = `agent_id=${encodeURIComponent(ELEVENLABS_AGENT_ID)}`;
+  const tokenResponse = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/token?${agentQuery}`, {
+    headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+  }).catch((networkError) => {
+    console.error('ElevenLabs conversation token request failed', String(networkError));
+    return null;
+  });
+  if (tokenResponse && tokenResponse.ok) {
+    const tokenData = await tokenResponse.json().catch(() => null);
+    const conversationToken = tokenData && typeof tokenData.token === 'string' ? tokenData.token : '';
+    if (conversationToken) return json({ conversationToken, overrides });
+    console.error('ElevenLabs token response missing token');
+  } else if (tokenResponse) {
+    const body = await tokenResponse.text().catch(() => '');
+    console.error('ElevenLabs conversation token failed', tokenResponse.status, body.slice(0, 300));
+  }
+
+  // Fallback: a short-lived signed WebSocket URL for the base agent.
   const signedResponse = await fetch(
-    `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(ELEVENLABS_AGENT_ID)}`,
+    `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?${agentQuery}`,
     { headers: { 'xi-api-key': ELEVENLABS_API_KEY } },
   );
   if (!signedResponse.ok) {
