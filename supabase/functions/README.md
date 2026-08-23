@@ -49,6 +49,13 @@ Set under Dashboard → **Edge Functions** → **Secrets**:
   sentence, never repeat it, never hold a conversation alone. Without it the model fills
   dead air with "can you hear me?" and the repetition feeds itself, which reads as a stuck
   agent even when the real fault is a dropped socket or a suspended microphone.
+
+  A response policy sits next to it: never restate, rephrase or quote the participant, and
+  answer a closing summary with one short sentence from the character's own position. A
+  short acknowledgement is still allowed as long as something of the character's own
+  follows it. Repeating the participant's words back is the cheapest way for a model to
+  acknowledge something, and it was observed in a real session when a participant delivered
+  a closing summary.
 - `elevenlabs-postcall` — post-call webhook. Verifies the ElevenLabs signature,
   matches the analysis to our session via the `ngg_session_id` dynamic variable, and
   stores the report. "Verify JWT" OFF. Extra secret: `ELEVENLABS_WEBHOOK_SECRET`.

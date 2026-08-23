@@ -117,6 +117,19 @@ const VOICE_PACKS = {
     // default filler. Once that sentence is in the history twice, repetition feeds itself
     // and the call reads as a stuck agent — which is what a participant reports, even when
     // the real fault is a dropped socket or a microphone the browser stopped capturing.
+    // Observed in a real session: the participant said a closing summary and the character
+    // said it straight back. A counterpart character has its own position, so restating the
+    // participant's words is never its answer — and the cheapest way for a model to
+    // acknowledge something is to repeat it, unless it is told otherwise. A short
+    // acknowledgement is still allowed; what is banned is an answer with nothing of its own.
+    responsePolicy: [
+      'אופן התגובה וסיום השיחה — הנחיה מחייבת:',
+      'אל תחזור על דברי המשתתף, אל תנסח אותם מחדש ואל תצטט אותו — לא כאישור, לא כהקדמה ולא כדי להראות שהבנת.',
+      'משפט אישור קצר מותר, אך מיד אחריו חייב לבוא תוכן משלך: עמדה, שאלה, הסכמה, סירוב או תנאי.',
+      'אל תחזור על משפט שכבר אמרת בשיחה. אם עמדתך לא השתנתה, נסח אותה אחרת או קדם את השיחה.',
+      'כשהמשתתף מסכם או מסמן שהשיחה מסתיימת: הגב במשפט אחד קצר מעמדת הדמות, בהתאם למידת ההתנגדות ולתנאים שהוגדרו לך. אל תסכם את השיחה ואל תפתח מחדש נושא שנסגר.',
+      'אחרי משפט הסיום שלך הפסק לדבר והמתן.',
+    ].join('\n'),
     silencePolicy: [
       'התנהלות בשתיקה או בתקלה טכנית:',
       'אם אינך מקבל תגובה מהמשתתף, המתן בשקט. אחרי המתנה ארוכה אמור משפט בדיקה קצר אחד, ואז המתן שוב.',
@@ -167,6 +180,14 @@ const VOICE_PACKS = {
       'אם במהלך השיחה מתברר באיזו לשון המשתתף מדבר על עצמו, התאימי את הפנייה אליו בהתאם.',
       'שדות ההנחיה שלהלן נכתבו עבור מנחה ולכן הם כוללים צורות עם לוכסן כמו "מנהל/ת" או "יודע/ת". אלה הנחיות בלבד ולא נוסח לדיבור. אל תקראי צורות כאלה בקול ואל תשתמשי בהן בשיחה — בחרי תמיד צורה אחת טבעית.',
     ].join('\n'),
+    responsePolicy: [
+      'אופן התגובה וסיום השיחה — הנחיה מחייבת:',
+      'אל תחזרי על דברי המשתתף, אל תנסחי אותם מחדש ואל תצטטי אותו — לא כאישור, לא כהקדמה ולא כדי להראות שהבנת.',
+      'משפט אישור קצר מותר, אך מיד אחריו חייב לבוא תוכן משלך: עמדה, שאלה, הסכמה, סירוב או תנאי.',
+      'אל תחזרי על משפט שכבר אמרת בשיחה. אם עמדתך לא השתנתה, נסחי אותה אחרת או קדמי את השיחה.',
+      'כשהמשתתף מסכם או מסמן שהשיחה מסתיימת: הגיבי במשפט אחד קצר מעמדת הדמות, בהתאם למידת ההתנגדות ולתנאים שהוגדרו לך. אל תסכמי את השיחה ואל תפתחי מחדש נושא שנסגר.',
+      'אחרי משפט הסיום שלך הפסיקי לדבר והמתיני.',
+    ].join('\n'),
     silencePolicy: [
       'התנהלות בשתיקה או בתקלה טכנית:',
       'אם אינך מקבלת תגובה מהמשתתף, המתיני בשקט. אחרי המתנה ארוכה אמרי משפט בדיקה קצר אחד, ואז המתיני שוב.',
@@ -216,6 +237,8 @@ function buildSystemPrompt(sim, participantName) {
     g.genderRule,
     '',
     g.addressing,
+    '',
+    g.responsePolicy,
     '',
     g.silencePolicy,
     '',

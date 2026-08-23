@@ -93,6 +93,24 @@ describe('character naming rules in the system prompt', () => {
     expect(prompt).toContain('זכור: "אורי" הוא שמך שלך. שם המשתתף הוא "רונית".')
   })
 
+  it('forbids mirroring the participant and defines a closing move, in its own gender', () => {
+    const female = buildSystemPrompt(simulation(), 'יוסי')
+    expect(female).toContain('אופן התגובה וסיום השיחה — הנחיה מחייבת:')
+    expect(female).toContain('אל תחזרי על דברי המשתתף, אל תנסחי אותם מחדש ואל תצטטי אותו')
+    expect(female).toContain('כשהמשתתף מסכם או מסמן שהשיחה מסתיימת: הגיבי במשפט אחד קצר מעמדת הדמות')
+    // A short acknowledgement stays allowed; only an answer with nothing of its own is banned.
+    expect(female).toContain('משפט אישור קצר מותר')
+
+    const male = buildSystemPrompt(simulation({ character: { name: 'אורי', voiceGender: 'male', personalityTraits: [] } }), 'יוסי')
+    expect(male).toContain('אל תחזור על דברי המשתתף, אל תנסח אותם מחדש ואל תצטט אותו')
+    expect(male).toContain('הגב במשפט אחד קצר מעמדת הדמות')
+  })
+
+  it('states the response policy before the character details', () => {
+    const prompt = buildSystemPrompt(simulation(), 'יוסי')
+    expect(prompt.indexOf('אופן התגובה וסיום השיחה')).toBeLessThan(prompt.indexOf('הדמות שאת מגלמת:'))
+  })
+
   it('tells the character how to behave in silence, in its own gender', () => {
     const female = buildSystemPrompt(simulation(), 'יוסי')
     expect(female).toContain('התנהלות בשתיקה או בתקלה טכנית:')
