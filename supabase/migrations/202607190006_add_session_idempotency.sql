@@ -5,28 +5,28 @@
 
 begin;
 
-alter table public.simulation_sessions
+alter table sim.simulation_sessions
   add column if not exists idempotency_key text;
 
-alter table public.simulation_sessions
+alter table sim.simulation_sessions
   add constraint simulation_sessions_idempotency_key_format
     check (idempotency_key is null or idempotency_key ~ '^[A-Za-z0-9_-]{8,128}$');
 
 -- A share link scopes idempotency: one key resolves to at most one attempt.
 create unique index if not exists simulation_sessions_idempotency_key_idx
-  on public.simulation_sessions (share_link_id, idempotency_key)
+  on sim.simulation_sessions (share_link_id, idempotency_key)
   where idempotency_key is not null;
 
-comment on column public.simulation_sessions.idempotency_key is
+comment on column sim.simulation_sessions.idempotency_key is
   'Client-supplied key that collapses duplicate session-start submissions for one share link into a single attempt.';
 
 -- Replace the session-start function with a four-argument, idempotency-aware
 -- version. The previous three-argument function is dropped so no ambiguous
 -- overload remains. The new function is no longer STRICT, so the required
 -- arguments are validated explicitly below.
-drop function if exists public.start_public_simulation_session(text, jsonb, text);
+drop function if exists sim.start_public_simulation_session(text, jsonb, text);
 
-create function public.start_public_simulation_session(
+create function sim.start_public_simulation_session(
   p_public_token text,
   p_details jsonb,
   p_consent_version text,
@@ -63,8 +63,8 @@ begin
   -- Scalar targets only: PL/pgSQL forbids a row variable in a multi-item INTO list.
   select simulation.id, simulation.owner_id, simulation.participant_fields, share_link.id
   into v_simulation_id, v_simulation_owner_id, v_participant_fields, v_share_link_id
-  from public.simulation_share_links as share_link
-  join public.simulations as simulation
+  from sim.simulation_share_links as share_link
+  join sim.simulations as simulation
     on simulation.id = share_link.simulation_id and simulation.owner_id = share_link.owner_id
   where share_link.token = p_public_token
     and share_link.status = 'active'
@@ -83,19 +83,19 @@ begin
   -- returned once, so a lost response is recovered by rotating the hash.
   if p_idempotency_key is not null then
     select id into v_session_id
-    from public.simulation_sessions
+    from sim.simulation_sessions
     where share_link_id = v_share_link_id
       and idempotency_key = p_idempotency_key
     limit 1;
 
     if v_session_id is not null then
       v_access_token := encode(extensions.gen_random_bytes(32), 'hex');
-      update public.simulation_sessions
+      update sim.simulation_sessions
       set access_token_hash = encode(extensions.digest(v_access_token, 'sha256'), 'hex')
       where id = v_session_id;
       return jsonb_build_object(
         'accessToken', v_access_token,
-        'session', private.public_session_json(v_session_id)
+        'session', sim_private.public_session_json(v_session_id)
       );
     end if;
   end if;
@@ -109,7 +109,7 @@ begin
     where field ->> 'enabled' = 'true' and field ->> 'type' = detail.key
   );
 
-  insert into public.participants (
+  insert into sim.participants (
     simulation_id, owner_id, details, consented_at, consent_version
   ) values (
     v_simulation_id, v_simulation_owner_id, v_filtered_details, now(), p_consent_version
@@ -118,7 +118,7 @@ begin
   v_access_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   begin
-    insert into public.simulation_sessions (
+    insert into sim.simulation_sessions (
       simulation_id, share_link_id, participant_id, owner_id, status,
       started_at, conversation_state, access_token_hash, idempotency_key
     ) values (
@@ -132,29 +132,29 @@ begin
     -- The participant row inserted above is left in place; a scheduled purge,
     -- not this function, is responsible for reclaiming orphaned records.
     select id into v_session_id
-    from public.simulation_sessions
+    from sim.simulation_sessions
     where share_link_id = v_share_link_id
       and idempotency_key = p_idempotency_key
     limit 1;
     if v_session_id is null then raise; end if;
-    update public.simulation_sessions
+    update sim.simulation_sessions
     set access_token_hash = encode(extensions.digest(v_access_token, 'sha256'), 'hex')
     where id = v_session_id;
   end;
 
   return jsonb_build_object(
     'accessToken', v_access_token,
-    'session', private.public_session_json(v_session_id)
+    'session', sim_private.public_session_json(v_session_id)
   );
 end;
 $$;
 
-revoke execute on function public.start_public_simulation_session(text, jsonb, text, text)
+revoke execute on function sim.start_public_simulation_session(text, jsonb, text, text)
   from public, anon, authenticated;
-grant execute on function public.start_public_simulation_session(text, jsonb, text, text)
+grant execute on function sim.start_public_simulation_session(text, jsonb, text, text)
   to anon, authenticated;
 
-comment on function public.start_public_simulation_session(text, jsonb, text, text) is
+comment on function sim.start_public_simulation_session(text, jsonb, text, text) is
   'Creates a capability-scoped participant and session after validating an active public link. An optional idempotency key collapses duplicate submissions for one share link into a single attempt.';
 
 commit;

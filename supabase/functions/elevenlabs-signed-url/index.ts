@@ -23,6 +23,11 @@
 // falls back to the base agent's voice and the distinction becomes inaudible.
 // SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
+// The simulation tables live in the `sim` schema of the shared NGG Supabase
+// project. PostgREST picks the schema from Accept-Profile (reads) and
+// Content-Profile (writes and RPC calls); without them it serves `public`.
+const DB_SCHEMA = 'sim';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -297,7 +302,10 @@ Deno.serve(async (req) => {
   // 1) Validate the participant session capability.
   const rpcResponse = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_public_simulation_session`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    headers: {
+      'Content-Type': 'application/json', 'Content-Profile': DB_SCHEMA,
+      apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
     body: JSON.stringify({ p_session_id: sessionId, p_access_token: accessToken }),
   });
   if (!rpcResponse.ok) {
@@ -314,7 +322,7 @@ Deno.serve(async (req) => {
     try {
       const simResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/simulations?id=eq.${session.simulation_id}&select=character,scenario,behavior,facilitator_configuration&limit=1`,
-        { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+        { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}`, 'Accept-Profile': DB_SCHEMA } },
       );
       if (simResponse.ok) {
         const rows = await simResponse.json();

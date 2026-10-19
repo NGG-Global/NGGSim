@@ -23,19 +23,19 @@ declare
 begin
   -- Attribute ownership to the earliest facilitator profile. To attribute it to a
   -- specific person instead, replace this with their profiles.id.
-  select id into v_owner from public.profiles order by created_at, id limit 1;
+  select id into v_owner from sim.profiles order by created_at, id limit 1;
   if v_owner is null then
     raise exception 'no facilitator profile found; sign in to the admin UI once, then re-run this seed';
   end if;
 
   -- משוב שנתי בלי הפתעות
   if exists (
-    select 1 from public.simulations
+    select 1 from sim.simulations
     where title = $title$משוב שנתי בלי הפתעות$title$ and deleted_at is null
   ) then
     raise notice 'skipping %, already present', $title$משוב שנתי בלי הפתעות$title$;
   else
-    insert into public.simulations (
+    insert into sim.simulations (
       owner_id, status, title, organization, scenario, character, behavior,
       participant_brief, participant_fields, facilitator_configuration,
       learning_objectives, analysis_criteria, published_at
@@ -57,7 +57,7 @@ begin
     returning id into v_sim;
 
     -- Publishing needs an active capability link; the token uses the column default.
-    insert into public.simulation_share_links (simulation_id, owner_id, status)
+    insert into sim.simulation_share_links (simulation_id, owner_id, status)
     values (v_sim, v_owner, 'active');
 
     raise notice 'inserted %', $title$משוב שנתי בלי הפתעות$title$;
@@ -65,12 +65,12 @@ begin
 
   -- זה תמיד תלוי באחרים
   if exists (
-    select 1 from public.simulations
+    select 1 from sim.simulations
     where title = $title$זה תמיד תלוי באחרים$title$ and deleted_at is null
   ) then
     raise notice 'skipping %, already present', $title$זה תמיד תלוי באחרים$title$;
   else
-    insert into public.simulations (
+    insert into sim.simulations (
       owner_id, status, title, organization, scenario, character, behavior,
       participant_brief, participant_fields, facilitator_configuration,
       learning_objectives, analysis_criteria, published_at
@@ -92,7 +92,7 @@ begin
     returning id into v_sim;
 
     -- Publishing needs an active capability link; the token uses the column default.
-    insert into public.simulation_share_links (simulation_id, owner_id, status)
+    insert into sim.simulation_share_links (simulation_id, owner_id, status)
     values (v_sim, v_owner, 'active');
 
     raise notice 'inserted %', $title$זה תמיד תלוי באחרים$title$;

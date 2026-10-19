@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { SimulationSupabaseClient } from '../services/supabaseClient'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBlankSimulation } from '../data/defaults'
 import { RepositoryError } from './repositoryErrors'
@@ -76,7 +76,7 @@ function createFakeClient(script: Record<string, FakeResponse[]>) {
     auth: {
       getClaims: vi.fn(async () => success({ claims: { sub: 'facilitator-a', is_anonymous: false } })),
     },
-  } as unknown as SupabaseClient
+  } as unknown as SimulationSupabaseClient
 
   return { client, calls }
 }

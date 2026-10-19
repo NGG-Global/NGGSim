@@ -14,53 +14,53 @@
 begin;
 
 -- Retire the owner-only read/write policies (migration 002) if still present.
-drop policy if exists simulations_select_own on public.simulations;
-drop policy if exists simulations_update_own on public.simulations;
-drop policy if exists simulation_share_links_select_own on public.simulation_share_links;
-drop policy if exists simulation_share_links_insert_own on public.simulation_share_links;
-drop policy if exists simulation_share_links_update_own on public.simulation_share_links;
-drop policy if exists participants_select_own on public.participants;
-drop policy if exists simulation_sessions_select_own on public.simulation_sessions;
-drop policy if exists simulation_reports_select_own on public.simulation_reports;
+drop policy if exists simulations_select_own on sim.simulations;
+drop policy if exists simulations_update_own on sim.simulations;
+drop policy if exists simulation_share_links_select_own on sim.simulation_share_links;
+drop policy if exists simulation_share_links_insert_own on sim.simulation_share_links;
+drop policy if exists simulation_share_links_update_own on sim.simulation_share_links;
+drop policy if exists participants_select_own on sim.participants;
+drop policy if exists simulation_sessions_select_own on sim.simulation_sessions;
+drop policy if exists simulation_reports_select_own on sim.simulation_reports;
 
 -- Recreate the shared policies from a clean slate.
-drop policy if exists simulations_select_shared_admin on public.simulations;
-drop policy if exists simulations_update_shared_admin on public.simulations;
-drop policy if exists simulation_share_links_select_shared_admin on public.simulation_share_links;
-drop policy if exists simulation_share_links_insert_shared_admin on public.simulation_share_links;
-drop policy if exists simulation_share_links_update_shared_admin on public.simulation_share_links;
-drop policy if exists participants_select_shared_admin on public.participants;
-drop policy if exists simulation_sessions_select_shared_admin on public.simulation_sessions;
-drop policy if exists simulation_reports_select_shared_admin on public.simulation_reports;
+drop policy if exists simulations_select_shared_admin on sim.simulations;
+drop policy if exists simulations_update_shared_admin on sim.simulations;
+drop policy if exists simulation_share_links_select_shared_admin on sim.simulation_share_links;
+drop policy if exists simulation_share_links_insert_shared_admin on sim.simulation_share_links;
+drop policy if exists simulation_share_links_update_shared_admin on sim.simulation_share_links;
+drop policy if exists participants_select_shared_admin on sim.participants;
+drop policy if exists simulation_sessions_select_shared_admin on sim.simulation_sessions;
+drop policy if exists simulation_reports_select_shared_admin on sim.simulation_reports;
 
-create policy simulations_select_shared_admin on public.simulations
+create policy simulations_select_shared_admin on sim.simulations
   for select to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
-create policy simulations_update_shared_admin on public.simulations
+create policy simulations_update_shared_admin on sim.simulations
   for update to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true')
   with check ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
 
-create policy simulation_share_links_select_shared_admin on public.simulation_share_links
+create policy simulation_share_links_select_shared_admin on sim.simulation_share_links
   for select to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
-create policy simulation_share_links_insert_shared_admin on public.simulation_share_links
+create policy simulation_share_links_insert_shared_admin on sim.simulation_share_links
   for insert to authenticated
   with check ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
-create policy simulation_share_links_update_shared_admin on public.simulation_share_links
+create policy simulation_share_links_update_shared_admin on sim.simulation_share_links
   for update to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true')
   with check ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
 
-create policy participants_select_shared_admin on public.participants
+create policy participants_select_shared_admin on sim.participants
   for select to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
 
-create policy simulation_sessions_select_shared_admin on public.simulation_sessions
+create policy simulation_sessions_select_shared_admin on sim.simulation_sessions
   for select to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
 
-create policy simulation_reports_select_shared_admin on public.simulation_reports
+create policy simulation_reports_select_shared_admin on sim.simulation_reports
   for select to authenticated
   using ((select auth.uid()) is not null and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true');
 
@@ -81,6 +81,6 @@ grant update (
   version,
   published_at,
   deleted_at
-) on public.simulations to authenticated;
+) on sim.simulations to authenticated;
 
 commit;

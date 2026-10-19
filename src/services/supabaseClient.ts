@@ -1,5 +1,16 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+/**
+ * Postgres schema that holds the simulation tables and RPCs. The NGG apps share
+ * one Supabase project, each in a schema of its own
+ * (supabase/migrations/202607190000_create_sim_schema.sql), so the client must
+ * name it.
+ */
+export const DB_SCHEMA = 'sim'
+
+// `any`: the repo has no generated Database types; rows are mapped explicitly.
+export type SimulationSupabaseClient = SupabaseClient<any, typeof DB_SCHEMA>
+
 export const SUPABASE_ENVIRONMENT_VARIABLES = [
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_PUBLISHABLE_KEY',
@@ -52,7 +63,7 @@ const browserEnvironment: SupabaseBrowserEnvironment = {
 
 export const supabaseConfiguration = inspectSupabaseConfiguration(browserEnvironment)
 
-export const supabaseClient: SupabaseClient | null =
+export const supabaseClient: SimulationSupabaseClient | null =
   supabaseConfiguration.isConfigured && supabaseConfiguration.url && supabaseConfiguration.publishableKey
     ? createClient(supabaseConfiguration.url, supabaseConfiguration.publishableKey, {
         auth: {
@@ -60,5 +71,6 @@ export const supabaseClient: SupabaseClient | null =
           persistSession: true,
           detectSessionInUrl: true,
         },
+        db: { schema: DB_SCHEMA },
       })
     : null

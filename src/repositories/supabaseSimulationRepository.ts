@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { createBlankSimulation } from '../data/defaults'
 import type {
   PublicSimulationResult,
@@ -9,7 +8,7 @@ import type {
   TranscriptEntry,
   VoiceSessionConfig,
 } from '../types/simulation'
-import { supabaseConfiguration } from '../services/supabaseClient'
+import { supabaseConfiguration, type SimulationSupabaseClient } from '../services/supabaseClient'
 import { RepositoryError, toRepositoryError } from './repositoryErrors'
 import { validatePublishable } from './simulationValidation'
 import {
@@ -45,7 +44,7 @@ export class SupabaseSimulationRepository implements SimulationRepository {
   private readonly versions = new Map<string, number>()
 
   constructor(
-    private readonly client: SupabaseClient | null,
+    private readonly client: SimulationSupabaseClient | null,
     private readonly baseUrl = currentBaseUrl(),
     private readonly supabaseUrl: string | null = supabaseConfiguration.url,
   ) {}
@@ -353,7 +352,7 @@ export class SupabaseSimulationRepository implements SimulationRepository {
     return response.data ? mapReportRow(response.data as unknown as ReportRow) : null
   }
 
-  private requireClient(): SupabaseClient {
+  private requireClient(): SimulationSupabaseClient {
     if (!this.client) {
       throw new RepositoryError(
         'ספק הנתונים Supabase נבחר, אך משתני הסביבה הציבוריים עדיין אינם מוגדרים.',

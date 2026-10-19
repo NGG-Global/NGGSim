@@ -5,11 +5,11 @@
 begin;
 
 -- Trigger helpers live outside the exposed public API schema.
-create schema if not exists private;
-comment on schema private is 'Internal database helpers that are not exposed through the Data API.';
-revoke all on schema private from public, anon, authenticated;
+create schema if not exists sim_private;
+comment on schema sim_private is 'Internal database helpers that are not exposed through the Data API.';
+revoke all on schema sim_private from public, anon, authenticated;
 
-create table public.profiles (
+create table sim.profiles (
   id uuid primary key references auth.users (id) on delete restrict,
   display_name text not null default '',
   created_at timestamptz not null default now(),
@@ -17,12 +17,12 @@ create table public.profiles (
   constraint profiles_display_name_length check (char_length(display_name) <= 120)
 );
 
-comment on table public.profiles is 'Private facilitator profile; id is the matching auth.users primary key.';
-comment on column public.profiles.id is 'The facilitator identity from auth.users.id.';
+comment on table sim.profiles is 'Private facilitator profile; id is the matching auth.users primary key.';
+comment on column sim.profiles.id is 'The facilitator identity from auth.users.id.';
 
-create table public.simulations (
+create table sim.simulations (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references public.profiles (id) on delete restrict,
+  owner_id uuid not null references sim.profiles (id) on delete restrict,
   status text not null default 'draft',
   title text not null default '',
   organization jsonb not null default '{}'::jsonb,
@@ -53,15 +53,15 @@ create table public.simulations (
   constraint simulations_id_owner_unique unique (id, owner_id)
 );
 
-comment on table public.simulations is 'Private simulation definitions, including facilitator-only prompts, hidden scenario data and evaluation configuration.';
-comment on column public.simulations.owner_id is 'Facilitator who owns the simulation and is enforced by RLS.';
-comment on column public.simulations.scenario is 'Full scenario JSON, including hiddenInfo; never return this object from a public endpoint.';
-comment on column public.simulations.character is 'Full character JSON, including secrets and conditional information; never return this object publicly.';
-comment on column public.simulations.behavior is 'Internal behavior, success and failure conditions.';
-comment on column public.simulations.facilitator_configuration is 'Facilitator-only notes and agent prompts.';
-comment on column public.simulations.learning_objectives is 'Internal learning objectives and metrics.';
+comment on table sim.simulations is 'Private simulation definitions, including facilitator-only prompts, hidden scenario data and evaluation configuration.';
+comment on column sim.simulations.owner_id is 'Facilitator who owns the simulation and is enforced by RLS.';
+comment on column sim.simulations.scenario is 'Full scenario JSON, including hiddenInfo; never return this object from a public endpoint.';
+comment on column sim.simulations.character is 'Full character JSON, including secrets and conditional information; never return this object publicly.';
+comment on column sim.simulations.behavior is 'Internal behavior, success and failure conditions.';
+comment on column sim.simulations.facilitator_configuration is 'Facilitator-only notes and agent prompts.';
+comment on column sim.simulations.learning_objectives is 'Internal learning objectives and metrics.';
 
-create table public.simulation_share_links (
+create table sim.simulation_share_links (
   id uuid primary key default gen_random_uuid(),
   simulation_id uuid not null,
   owner_id uuid not null,
@@ -72,7 +72,7 @@ create table public.simulation_share_links (
   created_at timestamptz not null default now(),
   constraint simulation_share_links_simulation_owner_fk
     foreign key (simulation_id, owner_id)
-    references public.simulations (id, owner_id)
+    references sim.simulations (id, owner_id)
     on delete restrict,
   constraint simulation_share_links_status_check check (status in ('active', 'revoked', 'expired')),
   constraint simulation_share_links_token_format
@@ -87,11 +87,11 @@ create table public.simulation_share_links (
   constraint simulation_share_links_id_simulation_owner_unique unique (id, simulation_id, owner_id)
 );
 
-comment on table public.simulation_share_links is 'Private capability links. Public callers may use a token only through the filtered RPC.';
-comment on column public.simulation_share_links.token is 'High-entropy public capability token; unique and never exposed by direct anonymous table access.';
-comment on constraint simulation_share_links_token_unique on public.simulation_share_links is 'Also provides the B-tree lookup index for public token resolution.';
+comment on table sim.simulation_share_links is 'Private capability links. Public callers may use a token only through the filtered RPC.';
+comment on column sim.simulation_share_links.token is 'High-entropy public capability token; unique and never exposed by direct anonymous table access.';
+comment on constraint simulation_share_links_token_unique on sim.simulation_share_links is 'Also provides the B-tree lookup index for public token resolution.';
 
-create table public.participants (
+create table sim.participants (
   id uuid primary key default gen_random_uuid(),
   simulation_id uuid not null,
   owner_id uuid not null,
@@ -101,17 +101,17 @@ create table public.participants (
   created_at timestamptz not null default now(),
   constraint participants_simulation_owner_fk
     foreign key (simulation_id, owner_id)
-    references public.simulations (id, owner_id)
+    references sim.simulations (id, owner_id)
     on delete restrict,
   constraint participants_details_object check (jsonb_typeof(details) = 'object'),
   constraint participants_consent_version_length check (char_length(consent_version) between 1 and 80),
   constraint participants_id_simulation_owner_unique unique (id, simulation_id, owner_id)
 );
 
-comment on table public.participants is 'Private participant records containing only fields enabled for the simulation and explicit consent metadata.';
-comment on column public.participants.details is 'Potential PII; collect minimally and never return through the public simulation lookup RPC.';
+comment on table sim.participants is 'Private participant records containing only fields enabled for the simulation and explicit consent metadata.';
+comment on column sim.participants.details is 'Potential PII; collect minimally and never return through the public simulation lookup RPC.';
 
-create table public.simulation_sessions (
+create table sim.simulation_sessions (
   id uuid primary key default gen_random_uuid(),
   simulation_id uuid not null,
   share_link_id uuid not null,
@@ -129,11 +129,11 @@ create table public.simulation_sessions (
   updated_at timestamptz not null default now(),
   constraint simulation_sessions_share_link_owner_fk
     foreign key (share_link_id, simulation_id, owner_id)
-    references public.simulation_share_links (id, simulation_id, owner_id)
+    references sim.simulation_share_links (id, simulation_id, owner_id)
     on delete restrict,
   constraint simulation_sessions_participant_owner_fk
     foreign key (participant_id, simulation_id, owner_id)
-    references public.participants (id, simulation_id, owner_id)
+    references sim.participants (id, simulation_id, owner_id)
     on delete restrict,
   constraint simulation_sessions_status_check check (
     status in ('created', 'ready', 'in_progress', 'processing', 'completed', 'failed', 'expired')
@@ -146,11 +146,11 @@ create table public.simulation_sessions (
   constraint simulation_sessions_id_simulation_owner_unique unique (id, simulation_id, owner_id)
 );
 
-comment on table public.simulation_sessions is 'Private conversation lifecycle and transcript data for one participant attempt.';
-comment on column public.simulation_sessions.conversation_id is 'Conversation identifier received from the voice provider; unique when present.';
-comment on column public.simulation_sessions.transcript is 'Private transcript; it is never part of ParticipantSimulationView.';
+comment on table sim.simulation_sessions is 'Private conversation lifecycle and transcript data for one participant attempt.';
+comment on column sim.simulation_sessions.conversation_id is 'Conversation identifier received from the voice provider; unique when present.';
+comment on column sim.simulation_sessions.transcript is 'Private transcript; it is never part of ParticipantSimulationView.';
 
-create table public.simulation_reports (
+create table sim.simulation_reports (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null,
   simulation_id uuid not null,
@@ -164,42 +164,42 @@ create table public.simulation_reports (
   updated_at timestamptz not null default now(),
   constraint simulation_reports_session_owner_fk
     foreign key (session_id, simulation_id, owner_id)
-    references public.simulation_sessions (id, simulation_id, owner_id)
+    references sim.simulation_sessions (id, simulation_id, owner_id)
     on delete restrict,
   constraint simulation_reports_scores_object check (jsonb_typeof(scores) = 'object'),
   constraint simulation_reports_learning_metrics_object check (jsonb_typeof(learning_metrics) = 'object'),
   constraint simulation_reports_session_unique unique (session_id)
 );
 
-comment on table public.simulation_reports is 'Private facilitator report; one report per simulation session.';
-comment on column public.simulation_reports.learning_metrics is 'Internal evaluation metrics that must never be returned by the public participant lookup.';
+comment on table sim.simulation_reports is 'Private facilitator report; one report per simulation session.';
+comment on column sim.simulation_reports.learning_metrics is 'Internal evaluation metrics that must never be returned by the public participant lookup.';
 
 -- Index every ownership and common lookup/filter column used by RLS or list pages.
-create index simulations_owner_id_idx on public.simulations (owner_id);
-create index simulations_created_at_idx on public.simulations (created_at desc);
-create index simulation_share_links_owner_id_idx on public.simulation_share_links (owner_id);
-create index simulation_share_links_simulation_id_idx on public.simulation_share_links (simulation_id);
-create index simulation_share_links_created_at_idx on public.simulation_share_links (created_at desc);
+create index simulations_owner_id_idx on sim.simulations (owner_id);
+create index simulations_created_at_idx on sim.simulations (created_at desc);
+create index simulation_share_links_owner_id_idx on sim.simulation_share_links (owner_id);
+create index simulation_share_links_simulation_id_idx on sim.simulation_share_links (simulation_id);
+create index simulation_share_links_created_at_idx on sim.simulation_share_links (created_at desc);
 create unique index simulation_share_links_one_active_per_simulation_idx
-  on public.simulation_share_links (simulation_id)
+  on sim.simulation_share_links (simulation_id)
   where status = 'active' and revoked_at is null;
-create index participants_owner_id_idx on public.participants (owner_id);
-create index participants_simulation_id_idx on public.participants (simulation_id);
-create index participants_created_at_idx on public.participants (created_at desc);
-create index simulation_sessions_owner_id_idx on public.simulation_sessions (owner_id);
-create index simulation_sessions_simulation_id_idx on public.simulation_sessions (simulation_id);
-create index simulation_sessions_share_link_id_idx on public.simulation_sessions (share_link_id);
-create index simulation_sessions_participant_id_idx on public.simulation_sessions (participant_id);
+create index participants_owner_id_idx on sim.participants (owner_id);
+create index participants_simulation_id_idx on sim.participants (simulation_id);
+create index participants_created_at_idx on sim.participants (created_at desc);
+create index simulation_sessions_owner_id_idx on sim.simulation_sessions (owner_id);
+create index simulation_sessions_simulation_id_idx on sim.simulation_sessions (simulation_id);
+create index simulation_sessions_share_link_id_idx on sim.simulation_sessions (share_link_id);
+create index simulation_sessions_participant_id_idx on sim.simulation_sessions (participant_id);
 create unique index simulation_sessions_conversation_id_idx
-  on public.simulation_sessions (conversation_id)
+  on sim.simulation_sessions (conversation_id)
   where conversation_id is not null;
-create index simulation_sessions_created_at_idx on public.simulation_sessions (created_at desc);
-create index simulation_reports_owner_id_idx on public.simulation_reports (owner_id);
-create index simulation_reports_simulation_id_idx on public.simulation_reports (simulation_id);
-create index simulation_reports_created_at_idx on public.simulation_reports (created_at desc);
+create index simulation_sessions_created_at_idx on sim.simulation_sessions (created_at desc);
+create index simulation_reports_owner_id_idx on sim.simulation_reports (owner_id);
+create index simulation_reports_simulation_id_idx on sim.simulation_reports (simulation_id);
+create index simulation_reports_created_at_idx on sim.simulation_reports (created_at desc);
 
 -- Keep mutable record timestamps consistent inside the database.
-create function private.set_updated_at()
+create function sim_private.set_updated_at()
 returns trigger
 language plpgsql
 set search_path = ''
@@ -210,34 +210,34 @@ begin
 end;
 $$;
 
-revoke all on function private.set_updated_at() from public, anon, authenticated;
+revoke all on function sim_private.set_updated_at() from public, anon, authenticated;
 
 create trigger profiles_set_updated_at
-before update on public.profiles
-for each row execute function private.set_updated_at();
+before update on sim.profiles
+for each row execute function sim_private.set_updated_at();
 
 create trigger simulations_set_updated_at
-before update on public.simulations
-for each row execute function private.set_updated_at();
+before update on sim.simulations
+for each row execute function sim_private.set_updated_at();
 
 create trigger simulation_sessions_set_updated_at
-before update on public.simulation_sessions
-for each row execute function private.set_updated_at();
+before update on sim.simulation_sessions
+for each row execute function sim_private.set_updated_at();
 
 create trigger simulation_reports_set_updated_at
-before update on public.simulation_reports
-for each row execute function private.set_updated_at();
+before update on sim.simulation_reports
+for each row execute function sim_private.set_updated_at();
 
 -- Provision a non-authoritative display profile for new Auth users.
 -- Authorization always uses auth.uid(), never display_name or user metadata.
-create function private.create_facilitator_profile()
+create function sim_private.create_facilitator_profile()
 returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name)
+  insert into sim.profiles (id, display_name)
   values (
     new.id,
     left(
@@ -255,15 +255,17 @@ begin
 end;
 $$;
 
-revoke all on function private.create_facilitator_profile() from public, anon, authenticated;
+revoke all on function sim_private.create_facilitator_profile() from public, anon, authenticated;
 
-create trigger create_facilitator_profile_after_signup
+-- auth.users is shared by every app in the NGG project, so the trigger name
+-- carries this app's prefix.
+create trigger sim_create_facilitator_profile_after_signup
 after insert on auth.users
-for each row execute function private.create_facilitator_profile();
+for each row execute function sim_private.create_facilitator_profile();
 
 -- Add profiles for Auth users that existed before this migration. This is additive
 -- and does not update or remove any existing profile.
-insert into public.profiles (id, display_name)
+insert into sim.profiles (id, display_name)
 select
   users.id,
   left(
@@ -279,18 +281,18 @@ on conflict (id) do nothing;
 
 -- Fail closed immediately. The next migration grants authenticated access and
 -- adds owner policies; anon never receives direct table privileges.
-alter table public.profiles enable row level security;
-alter table public.simulations enable row level security;
-alter table public.simulation_share_links enable row level security;
-alter table public.participants enable row level security;
-alter table public.simulation_sessions enable row level security;
-alter table public.simulation_reports enable row level security;
+alter table sim.profiles enable row level security;
+alter table sim.simulations enable row level security;
+alter table sim.simulation_share_links enable row level security;
+alter table sim.participants enable row level security;
+alter table sim.simulation_sessions enable row level security;
+alter table sim.simulation_reports enable row level security;
 
-revoke all on table public.profiles from public, anon, authenticated;
-revoke all on table public.simulations from public, anon, authenticated;
-revoke all on table public.simulation_share_links from public, anon, authenticated;
-revoke all on table public.participants from public, anon, authenticated;
-revoke all on table public.simulation_sessions from public, anon, authenticated;
-revoke all on table public.simulation_reports from public, anon, authenticated;
+revoke all on table sim.profiles from public, anon, authenticated;
+revoke all on table sim.simulations from public, anon, authenticated;
+revoke all on table sim.simulation_share_links from public, anon, authenticated;
+revoke all on table sim.participants from public, anon, authenticated;
+revoke all on table sim.simulation_sessions from public, anon, authenticated;
+revoke all on table sim.simulation_reports from public, anon, authenticated;
 
 commit;

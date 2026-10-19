@@ -4,7 +4,7 @@
 
 begin;
 
-create function public.get_participant_simulation(public_token text)
+create function sim.get_participant_simulation(public_token text)
 returns jsonb
 language sql
 stable
@@ -71,8 +71,8 @@ as $$
       'scenarioSummary', coalesce(simulation.participant_brief ->> 'situationDescription', '')
     )
   )
-  from public.simulation_share_links as share_link
-  join public.simulations as simulation
+  from sim.simulation_share_links as share_link
+  join sim.simulations as simulation
     on simulation.id = share_link.simulation_id
    and simulation.owner_id = share_link.owner_id
   where char_length(public_token) between 32 and 256
@@ -86,12 +86,12 @@ as $$
   limit 1;
 $$;
 
-comment on function public.get_participant_simulation(text) is
+comment on function sim.get_participant_simulation(text) is
   'Resolves an active public token to an allowlisted ParticipantSimulationView. Returns null for invalid, revoked, expired or unpublished links.';
 
 -- PostgreSQL grants function execution to PUBLIC by default, so remove it first
 -- and then grant only the roles that may resolve a participant link.
-revoke execute on function public.get_participant_simulation(text) from public, anon, authenticated;
-grant execute on function public.get_participant_simulation(text) to anon, authenticated;
+revoke execute on function sim.get_participant_simulation(text) from public, anon, authenticated;
+grant execute on function sim.get_participant_simulation(text) to anon, authenticated;
 
 commit;

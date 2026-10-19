@@ -1,29 +1,29 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-set local search_path = public, extensions;
+set local search_path = sim, extensions;
 
-select plan(15);
+select plan(16);
 
 -- Deterministic local-only identities. The transaction is rolled back at the end.
 insert into auth.users (id, email, raw_user_meta_data, created_at, updated_at)
 values
   (
     '10000000-0000-4000-8000-000000000001'::uuid,
-    'facilitator-a@example.test',
+    'facilitator-a@nggconsult.com',
     '{"display_name":"Facilitator A"}'::jsonb,
     now(),
     now()
   ),
   (
     '20000000-0000-4000-8000-000000000002'::uuid,
-    'facilitator-b@example.test',
+    'facilitator-b@nggconsult.com',
     '{"display_name":"Facilitator B"}'::jsonb,
     now(),
     now()
   );
 
-insert into public.simulations (
+insert into sim.simulations (
   id,
   owner_id,
   status,
@@ -85,7 +85,7 @@ values
     now()
   );
 
-insert into public.simulation_share_links (
+insert into sim.simulation_share_links (
   id,
   simulation_id,
   owner_id,
@@ -119,7 +119,7 @@ values
     null
   );
 
-insert into public.participants (
+insert into sim.participants (
   id,
   simulation_id,
   owner_id,
@@ -145,7 +145,7 @@ values
     'test-v1'
   );
 
-insert into public.simulation_sessions (
+insert into sim.simulation_sessions (
   id,
   simulation_id,
   share_link_id,
@@ -174,7 +174,7 @@ values
     'completed'
   );
 
-insert into public.simulation_reports (
+insert into sim.simulation_reports (
   id,
   session_id,
   simulation_id,
@@ -202,7 +202,7 @@ select results_eq(
     select count(*)::bigint
     from pg_catalog.pg_class as relation
     join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
-    where namespace.nspname = 'public'
+    where namespace.nspname = 'sim'
       and relation.relname in (
         'profiles',
         'simulations',
@@ -222,19 +222,19 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
 select set_config(
   'request.jwt.claims',
-  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","email":"facilitator-a@nggconsult.com"}',
   true
 );
 
 select results_eq(
   $$
     select
-      (select count(*) from public.profiles)::bigint,
-      (select count(*) from public.simulations)::bigint,
-      (select count(*) from public.simulation_share_links)::bigint,
-      (select count(*) from public.participants)::bigint,
-      (select count(*) from public.simulation_sessions)::bigint,
-      (select count(*) from public.simulation_reports)::bigint
+      (select count(*) from sim.profiles)::bigint,
+      (select count(*) from sim.simulations)::bigint,
+      (select count(*) from sim.simulation_share_links)::bigint,
+      (select count(*) from sim.participants)::bigint,
+      (select count(*) from sim.simulation_sessions)::bigint,
+      (select count(*) from sim.simulation_reports)::bigint
   $$,
   $$values (1::bigint, 2::bigint, 3::bigint, 2::bigint, 2::bigint, 2::bigint)$$,
   'Admin A sees the shared workspace while profiles remain private'
@@ -242,7 +242,7 @@ select results_eq(
 
 select throws_ok(
   $$
-    insert into public.simulations (owner_id, title)
+    insert into sim.simulations (owner_id, title)
     values ('20000000-0000-4000-8000-000000000002'::uuid, 'Forbidden insert')
   $$,
   '42501',
@@ -252,7 +252,7 @@ select throws_ok(
 
 select results_eq(
   $$
-    update public.simulations
+    update sim.simulations
     set title = 'Forbidden update'
     where id = 'b0000000-0000-4000-8000-000000000002'::uuid
     returning id
@@ -263,11 +263,11 @@ select results_eq(
 
 select results_eq(
   $$
-    delete from public.simulations
+    delete from sim.simulations
     where id = 'b0000000-0000-4000-8000-000000000002'::uuid
     returning id
   $$,
-  $$select id from public.simulations where false$$,
+  $$select id from sim.simulations where false$$,
   'Hard DELETE remains creator-only; shared UI deletion uses archive_simulation'
 );
 
@@ -277,22 +277,47 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '20000000-0000-4000-8000-000000000002', true);
 select set_config(
   'request.jwt.claims',
-  '{"sub":"20000000-0000-4000-8000-000000000002","role":"authenticated"}',
+  '{"sub":"20000000-0000-4000-8000-000000000002","role":"authenticated","email":"facilitator-b@nggconsult.com"}',
   true
 );
 
 select results_eq(
   $$
     select
-      (select count(*) from public.profiles)::bigint,
-      (select count(*) from public.simulations)::bigint,
-      (select count(*) from public.simulation_share_links)::bigint,
-      (select count(*) from public.participants)::bigint,
-      (select count(*) from public.simulation_sessions)::bigint,
-      (select count(*) from public.simulation_reports)::bigint
+      (select count(*) from sim.profiles)::bigint,
+      (select count(*) from sim.simulations)::bigint,
+      (select count(*) from sim.simulation_share_links)::bigint,
+      (select count(*) from sim.participants)::bigint,
+      (select count(*) from sim.simulation_sessions)::bigint,
+      (select count(*) from sim.simulation_reports)::bigint
   $$,
   $$values (1::bigint, 2::bigint, 3::bigint, 2::bigint, 2::bigint, 2::bigint)$$,
   'Admin B sees the same shared workspace while profiles remain private'
+);
+
+-- The project's auth.users is shared with the other NGG apps: a signed-in
+-- account outside @nggconsult.com is not a facilitator and sees nothing.
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000003', true);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"30000000-0000-4000-8000-000000000003","role":"authenticated","email":"outsider@example.test"}',
+  true
+);
+
+select results_eq(
+  $$
+    select
+      (select count(*) from sim.profiles)::bigint,
+      (select count(*) from sim.simulations)::bigint,
+      (select count(*) from sim.simulation_share_links)::bigint,
+      (select count(*) from sim.participants)::bigint,
+      (select count(*) from sim.simulation_sessions)::bigint,
+      (select count(*) from sim.simulation_reports)::bigint
+  $$,
+  $$values (0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint)$$,
+  'A signed-in account outside @nggconsult.com sees no facilitator data'
 );
 
 -- An unauthenticated caller has no table privilege, but may execute the one
@@ -303,14 +328,14 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000000
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
 select throws_ok(
-  $$select * from public.simulations$$,
+  $$select * from sim.simulations$$,
   '42501',
   'permission denied for table simulations',
   'anon cannot directly select a full simulation'
 );
 
 select is(
-  public.get_participant_simulation(
+  sim.get_participant_simulation(
     'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   ) ->> 'title',
   'Simulation A',
@@ -321,7 +346,7 @@ select is(
   (
     select array_agg(key order by key)
     from jsonb_object_keys(
-      public.get_participant_simulation(
+      sim.get_participant_simulation(
         'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       )
     ) as keys(key)
@@ -342,7 +367,7 @@ select is(
   (
     select array_agg(key order by key)
     from jsonb_object_keys(
-      public.get_participant_simulation(
+      sim.get_participant_simulation(
         'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       ) -> 'participantBrief'
     ) as keys(key)
@@ -367,7 +392,7 @@ select is(
   (
     select array_agg(key order by key)
     from jsonb_object_keys(
-      public.get_participant_simulation(
+      sim.get_participant_simulation(
         'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       ) -> 'character'
     ) as keys(key)
@@ -380,7 +405,7 @@ select is(
   (
     select array_agg(key order by key)
     from jsonb_object_keys(
-      public.get_participant_simulation(
+      sim.get_participant_simulation(
         'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       ) -> 'participantFields' -> 0
     ) as keys(key)
@@ -390,7 +415,7 @@ select is(
 );
 
 select unlike(
-  public.get_participant_simulation(
+  sim.get_participant_simulation(
     'active_public_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   )::text,
   '%DO_NOT_LEAK%',
@@ -398,7 +423,7 @@ select unlike(
 );
 
 select is(
-  public.get_participant_simulation(
+  sim.get_participant_simulation(
     'revoked_public_token_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
   ),
   null::jsonb,
@@ -406,7 +431,7 @@ select is(
 );
 
 select is(
-  public.get_participant_simulation(
+  sim.get_participant_simulation(
     'invalid_public_token_cccccccccccccccccccccccccccccccccccccccccc'
   ),
   null::jsonb,

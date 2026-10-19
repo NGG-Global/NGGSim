@@ -8,6 +8,11 @@
 // Secrets: ELEVENLABS_WEBHOOK_SECRET (from the ElevenLabs webhook config).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
+// The simulation tables live in the `sim` schema of the shared NGG Supabase
+// project. PostgREST picks the schema from Accept-Profile (reads) and
+// Content-Profile (writes and RPC calls); without them it serves `public`.
+const DB_SCHEMA = 'sim';
+
 function ok(body = { ok: true }, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -129,7 +134,7 @@ Deno.serve(async (req) => {
 
   // Look up the session (service role) to get simulation_id + owner_id for the report FK.
   const sResp = await fetch(`${SUPABASE_URL}/rest/v1/simulation_sessions?id=eq.${sessionId}&select=simulation_id,owner_id&limit=1`,
-    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } });
+    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}`, 'Accept-Profile': DB_SCHEMA } });
   const sRows = sResp.ok ? await sResp.json().catch(() => []) : [];
   const sess = Array.isArray(sRows) ? sRows[0] : null;
   if (!sess) { console.error('session not found for', sessionId); return ok(); }
@@ -138,7 +143,7 @@ Deno.serve(async (req) => {
   // opted into. Empty/absent means "all criteria".
   let allowed = null;
   const simResp = await fetch(`${SUPABASE_URL}/rest/v1/simulations?id=eq.${sess.simulation_id}&select=analysis_criteria&limit=1`,
-    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } });
+    { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}`, 'Accept-Profile': DB_SCHEMA } });
   if (simResp.ok) {
     const simRows = await simResp.json().catch(() => []);
     const list = Array.isArray(simRows) && simRows[0] && Array.isArray(simRows[0].analysis_criteria) ? simRows[0].analysis_criteria : [];
@@ -163,6 +168,7 @@ Deno.serve(async (req) => {
     headers: {
       apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}`,
       'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates',
+      'Content-Profile': DB_SCHEMA,
     },
     body: JSON.stringify(report),
   });

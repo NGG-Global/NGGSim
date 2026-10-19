@@ -5,24 +5,24 @@ begin;
 
 create extension if not exists pgcrypto with schema extensions;
 
-alter table public.simulation_sessions
+alter table sim.simulation_sessions
   add column if not exists conversation_state text not null default 'listening',
   add column if not exists access_token_hash text;
 
-alter table public.simulation_sessions
+alter table sim.simulation_sessions
   add constraint simulation_sessions_conversation_state_check
     check (conversation_state in ('listening', 'thinking', 'speaking')),
   add constraint simulation_sessions_access_token_hash_check
     check (access_token_hash is null or access_token_hash ~ '^[a-f0-9]{64}$');
 
-comment on column public.simulation_sessions.access_token_hash is
+comment on column sim.simulation_sessions.access_token_hash is
   'SHA-256 hash of the per-session browser capability. The plaintext token is returned once and never stored.';
-comment on column public.simulation_sessions.conversation_state is
+comment on column sim.simulation_sessions.conversation_state is
   'Last persisted participant conversation UI state.';
 
 -- Authenticated facilitator mutations use SECURITY INVOKER so the existing RLS
 -- owner policies remain the authorization boundary.
-create function public.publish_simulation(p_simulation_id uuid)
+create function sim.publish_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -38,7 +38,7 @@ begin
   end if;
 
   perform 1
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id
     and owner_id = v_owner_id
     and deleted_at is null
@@ -46,7 +46,7 @@ begin
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
   select token into v_token
-  from public.simulation_share_links
+  from sim.simulation_share_links
   where simulation_id = p_simulation_id
     and owner_id = v_owner_id
     and status = 'active'
@@ -56,12 +56,12 @@ begin
   limit 1;
 
   if v_token is null then
-    insert into public.simulation_share_links (simulation_id, owner_id)
+    insert into sim.simulation_share_links (simulation_id, owner_id)
     values (p_simulation_id, v_owner_id)
     returning token into v_token;
   end if;
 
-  update public.simulations
+  update sim.simulations
   set status = 'published', published_at = coalesce(published_at, now()), version = version + 1
   where id = p_simulation_id and owner_id = v_owner_id;
 
@@ -69,7 +69,7 @@ begin
 end;
 $$;
 
-create function public.unpublish_simulation(p_simulation_id uuid)
+create function sim.unpublish_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -84,19 +84,19 @@ begin
   end if;
 
   perform 1
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and owner_id = v_owner_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  update public.simulations
+  update sim.simulations
   set status = 'unpublished', version = version + 1
   where id = p_simulation_id and owner_id = v_owner_id;
 
@@ -104,7 +104,7 @@ begin
 end;
 $$;
 
-create function public.regenerate_simulation_public_token(p_simulation_id uuid)
+create function sim.regenerate_simulation_public_token(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -120,23 +120,23 @@ begin
   end if;
 
   perform 1
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and owner_id = v_owner_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  insert into public.simulation_share_links (simulation_id, owner_id)
+  insert into sim.simulation_share_links (simulation_id, owner_id)
   values (p_simulation_id, v_owner_id)
   returning token into v_token;
 
-  update public.simulations
+  update sim.simulations
   set status = 'published', published_at = coalesce(published_at, now()), version = version + 1
   where id = p_simulation_id and owner_id = v_owner_id;
 
@@ -144,7 +144,7 @@ begin
 end;
 $$;
 
-create function public.archive_simulation(p_simulation_id uuid)
+create function sim.archive_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -159,19 +159,19 @@ begin
   end if;
 
   perform 1
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and owner_id = v_owner_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  update public.simulations
+  update sim.simulations
   set status = 'unpublished', deleted_at = now(), version = version + 1
   where id = p_simulation_id and owner_id = v_owner_id;
 
@@ -179,18 +179,18 @@ begin
 end;
 $$;
 
-revoke execute on function public.publish_simulation(uuid) from public, anon, authenticated;
-revoke execute on function public.unpublish_simulation(uuid) from public, anon, authenticated;
-revoke execute on function public.regenerate_simulation_public_token(uuid) from public, anon, authenticated;
-revoke execute on function public.archive_simulation(uuid) from public, anon, authenticated;
-grant execute on function public.publish_simulation(uuid) to authenticated;
-grant execute on function public.unpublish_simulation(uuid) to authenticated;
-grant execute on function public.regenerate_simulation_public_token(uuid) to authenticated;
-grant execute on function public.archive_simulation(uuid) to authenticated;
+revoke execute on function sim.publish_simulation(uuid) from public, anon, authenticated;
+revoke execute on function sim.unpublish_simulation(uuid) from public, anon, authenticated;
+revoke execute on function sim.regenerate_simulation_public_token(uuid) from public, anon, authenticated;
+revoke execute on function sim.archive_simulation(uuid) from public, anon, authenticated;
+grant execute on function sim.publish_simulation(uuid) to authenticated;
+grant execute on function sim.unpublish_simulation(uuid) to authenticated;
+grant execute on function sim.regenerate_simulation_public_token(uuid) to authenticated;
+grant execute on function sim.archive_simulation(uuid) to authenticated;
 
 -- The helper is private and has no caller privileges. Public functions validate
 -- the capability hash before using it.
-create function private.public_session_json(p_session_id uuid)
+create function sim_private.public_session_json(p_session_id uuid)
 returns jsonb
 language sql
 stable
@@ -215,16 +215,16 @@ as $$
     ),
     'share_link', jsonb_build_object('token', share_link.token)
   )
-  from public.simulation_sessions as session
-  join public.participants as participant on participant.id = session.participant_id
-  join public.simulation_share_links as share_link on share_link.id = session.share_link_id
+  from sim.simulation_sessions as session
+  join sim.participants as participant on participant.id = session.participant_id
+  join sim.simulation_share_links as share_link on share_link.id = session.share_link_id
   where session.id = p_session_id
   limit 1;
 $$;
 
-revoke execute on function private.public_session_json(uuid) from public, anon, authenticated;
+revoke execute on function sim_private.public_session_json(uuid) from public, anon, authenticated;
 
-create function public.start_public_simulation_session(
+create function sim.start_public_simulation_session(
   p_public_token text,
   p_details jsonb,
   p_consent_version text
@@ -257,8 +257,8 @@ begin
   -- Scalar targets only: PL/pgSQL forbids a row variable in a multi-item INTO list.
   select simulation.id, simulation.owner_id, simulation.participant_fields, share_link.id
   into v_simulation_id, v_simulation_owner_id, v_participant_fields, v_share_link_id
-  from public.simulation_share_links as share_link
-  join public.simulations as simulation
+  from sim.simulation_share_links as share_link
+  join sim.simulations as simulation
     on simulation.id = share_link.simulation_id and simulation.owner_id = share_link.owner_id
   where share_link.token = p_public_token
     and share_link.status = 'active'
@@ -280,14 +280,14 @@ begin
     where field ->> 'enabled' = 'true' and field ->> 'type' = detail.key
   );
 
-  insert into public.participants (
+  insert into sim.participants (
     simulation_id, owner_id, details, consented_at, consent_version
   ) values (
     v_simulation_id, v_simulation_owner_id, v_filtered_details, now(), p_consent_version
   ) returning id into v_participant_id;
 
   v_access_token := encode(extensions.gen_random_bytes(32), 'hex');
-  insert into public.simulation_sessions (
+  insert into sim.simulation_sessions (
     simulation_id, share_link_id, participant_id, owner_id, status,
     started_at, conversation_state, access_token_hash
   ) values (
@@ -297,12 +297,12 @@ begin
 
   return jsonb_build_object(
     'accessToken', v_access_token,
-    'session', private.public_session_json(v_session_id)
+    'session', sim_private.public_session_json(v_session_id)
   );
 end;
 $$;
 
-create function public.get_public_simulation_session(p_session_id uuid, p_access_token text)
+create function sim.get_public_simulation_session(p_session_id uuid, p_access_token text)
 returns jsonb
 language sql
 stable
@@ -310,8 +310,8 @@ strict
 security definer
 set search_path = ''
 as $$
-  select private.public_session_json(session.id)
-  from public.simulation_sessions as session
+  select sim_private.public_session_json(session.id)
+  from sim.simulation_sessions as session
   where session.id = p_session_id
     and char_length(p_access_token) = 64
     and p_access_token ~ '^[a-f0-9]{64}$'
@@ -319,7 +319,7 @@ as $$
   limit 1;
 $$;
 
-create function public.update_public_simulation_session(
+create function sim.update_public_simulation_session(
   p_session_id uuid,
   p_access_token text,
   p_duration_seconds integer default null,
@@ -341,7 +341,7 @@ begin
     return null;
   end if;
 
-  update public.simulation_sessions
+  update sim.simulation_sessions
   set duration_seconds = coalesce(p_duration_seconds, duration_seconds),
       conversation_state = coalesce(p_conversation_state, conversation_state),
       transcript = coalesce(p_transcript, transcript)
@@ -350,11 +350,11 @@ begin
     and access_token_hash = encode(extensions.digest(p_access_token, 'sha256'), 'hex');
 
   if not found then return null; end if;
-  return private.public_session_json(p_session_id);
+  return sim_private.public_session_json(p_session_id);
 end;
 $$;
 
-create function public.complete_public_simulation_session(
+create function sim.complete_public_simulation_session(
   p_session_id uuid,
   p_access_token text,
   p_duration_seconds integer,
@@ -379,35 +379,35 @@ begin
   end if;
 
   select status into v_status
-  from public.simulation_sessions
+  from sim.simulation_sessions
   where id = p_session_id
     and access_token_hash = encode(extensions.digest(p_access_token, 'sha256'), 'hex')
   for update;
   if v_status is null then return null; end if;
-  if v_status = 'completed' then return private.public_session_json(p_session_id); end if;
+  if v_status = 'completed' then return sim_private.public_session_json(p_session_id); end if;
   if v_status <> 'in_progress' then return null; end if;
 
-  update public.simulation_sessions
+  update sim.simulation_sessions
   set status = 'completed', ended_at = now(), duration_seconds = p_duration_seconds,
       conversation_state = 'listening', transcript = p_transcript
   where id = p_session_id;
 
-  return private.public_session_json(p_session_id);
+  return sim_private.public_session_json(p_session_id);
 end;
 $$;
 
-revoke execute on function public.start_public_simulation_session(text, jsonb, text) from public, anon, authenticated;
-revoke execute on function public.get_public_simulation_session(uuid, text) from public, anon, authenticated;
-revoke execute on function public.update_public_simulation_session(uuid, text, integer, text, jsonb) from public, anon, authenticated;
-revoke execute on function public.complete_public_simulation_session(uuid, text, integer, jsonb) from public, anon, authenticated;
-grant execute on function public.start_public_simulation_session(text, jsonb, text) to anon, authenticated;
-grant execute on function public.get_public_simulation_session(uuid, text) to anon, authenticated;
-grant execute on function public.update_public_simulation_session(uuid, text, integer, text, jsonb) to anon, authenticated;
-grant execute on function public.complete_public_simulation_session(uuid, text, integer, jsonb) to anon, authenticated;
+revoke execute on function sim.start_public_simulation_session(text, jsonb, text) from public, anon, authenticated;
+revoke execute on function sim.get_public_simulation_session(uuid, text) from public, anon, authenticated;
+revoke execute on function sim.update_public_simulation_session(uuid, text, integer, text, jsonb) from public, anon, authenticated;
+revoke execute on function sim.complete_public_simulation_session(uuid, text, integer, jsonb) from public, anon, authenticated;
+grant execute on function sim.start_public_simulation_session(text, jsonb, text) to anon, authenticated;
+grant execute on function sim.get_public_simulation_session(uuid, text) to anon, authenticated;
+grant execute on function sim.update_public_simulation_session(uuid, text, integer, text, jsonb) to anon, authenticated;
+grant execute on function sim.complete_public_simulation_session(uuid, text, integer, jsonb) to anon, authenticated;
 
-comment on function public.publish_simulation(uuid) is 'Atomically publishes an owned simulation and creates an active share link when needed.';
-comment on function public.archive_simulation(uuid) is 'Soft-deletes an owned simulation and revokes its active public link atomically.';
-comment on function public.start_public_simulation_session(text, jsonb, text) is 'Creates a capability-scoped participant and session after validating an active public link.';
-comment on function public.get_public_simulation_session(uuid, text) is 'Returns one participant session only when its high-entropy capability is presented.';
+comment on function sim.publish_simulation(uuid) is 'Atomically publishes an owned simulation and creates an active share link when needed.';
+comment on function sim.archive_simulation(uuid) is 'Soft-deletes an owned simulation and revokes its active public link atomically.';
+comment on function sim.start_public_simulation_session(text, jsonb, text) is 'Creates a capability-scoped participant and session after validating an active public link.';
+comment on function sim.get_public_simulation_session(uuid, text) is 'Returns one participant session only when its high-entropy capability is presented.';
 
 commit;

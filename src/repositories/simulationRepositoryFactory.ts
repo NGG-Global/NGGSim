@@ -1,6 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { SimulationRepository } from '../types/simulation'
-import { supabaseClient, supabaseConfiguration } from '../services/supabaseClient'
+import { supabaseClient, supabaseConfiguration, type SimulationSupabaseClient } from '../services/supabaseClient'
 import { LocalSimulationRepository } from './localSimulationRepository'
 import { SupabaseSimulationRepository } from './supabaseSimulationRepository'
 
@@ -16,7 +15,7 @@ export function inspectDataProvider(environment: DataProviderEnvironment): Simul
 
 export function createSimulationRepository(options: {
   provider?: SimulationDataProvider
-  client?: SupabaseClient | null
+  client?: SimulationSupabaseClient | null
   baseUrl?: string
 } = {}): SimulationRepository {
   const provider = options.provider ?? inspectDataProvider({ VITE_DATA_PROVIDER: import.meta.env.VITE_DATA_PROVIDER })

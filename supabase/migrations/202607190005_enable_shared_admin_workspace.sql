@@ -6,7 +6,7 @@
 begin;
 
 -- Keep creator identity immutable even though updates are shared.
-revoke update on table public.simulations from authenticated;
+revoke update on table sim.simulations from authenticated;
 grant update (
   status,
   title,
@@ -21,9 +21,9 @@ grant update (
   version,
   published_at,
   deleted_at
-) on table public.simulations to authenticated;
+) on table sim.simulations to authenticated;
 
-revoke insert, update on table public.simulation_share_links from authenticated;
+revoke insert, update on table sim.simulation_share_links from authenticated;
 grant insert (
   simulation_id,
   owner_id,
@@ -31,19 +31,19 @@ grant insert (
   status,
   expires_at,
   revoked_at
-) on table public.simulation_share_links to authenticated;
+) on table sim.simulation_share_links to authenticated;
 grant update (
   status,
   expires_at,
   revoked_at
-) on table public.simulation_share_links to authenticated;
+) on table sim.simulation_share_links to authenticated;
 
 -- Replace owner-only permissive policies. The restrictive anonymous-user
 -- policies from migration 002 remain in force and are ANDed with these rules.
-drop policy simulations_select_own on public.simulations;
-drop policy simulations_update_own on public.simulations;
+drop policy simulations_select_own on sim.simulations;
+drop policy simulations_update_own on sim.simulations;
 create policy simulations_select_shared_admin
-on public.simulations
+on sim.simulations
 for select
 to authenticated
 using (
@@ -51,7 +51,7 @@ using (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 create policy simulations_update_shared_admin
-on public.simulations
+on sim.simulations
 for update
 to authenticated
 using (
@@ -63,11 +63,11 @@ with check (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 
-drop policy simulation_share_links_select_own on public.simulation_share_links;
-drop policy simulation_share_links_insert_own on public.simulation_share_links;
-drop policy simulation_share_links_update_own on public.simulation_share_links;
+drop policy simulation_share_links_select_own on sim.simulation_share_links;
+drop policy simulation_share_links_insert_own on sim.simulation_share_links;
+drop policy simulation_share_links_update_own on sim.simulation_share_links;
 create policy simulation_share_links_select_shared_admin
-on public.simulation_share_links
+on sim.simulation_share_links
 for select
 to authenticated
 using (
@@ -75,7 +75,7 @@ using (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 create policy simulation_share_links_insert_shared_admin
-on public.simulation_share_links
+on sim.simulation_share_links
 for insert
 to authenticated
 with check (
@@ -83,7 +83,7 @@ with check (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 create policy simulation_share_links_update_shared_admin
-on public.simulation_share_links
+on sim.simulation_share_links
 for update
 to authenticated
 using (
@@ -95,9 +95,9 @@ with check (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 
-drop policy participants_select_own on public.participants;
+drop policy participants_select_own on sim.participants;
 create policy participants_select_shared_admin
-on public.participants
+on sim.participants
 for select
 to authenticated
 using (
@@ -105,9 +105,9 @@ using (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 
-drop policy simulation_sessions_select_own on public.simulation_sessions;
+drop policy simulation_sessions_select_own on sim.simulation_sessions;
 create policy simulation_sessions_select_shared_admin
-on public.simulation_sessions
+on sim.simulation_sessions
 for select
 to authenticated
 using (
@@ -115,9 +115,9 @@ using (
   and coalesce((select auth.jwt() ->> 'is_anonymous'), 'false') <> 'true'
 );
 
-drop policy simulation_reports_select_own on public.simulation_reports;
+drop policy simulation_reports_select_own on sim.simulation_reports;
 create policy simulation_reports_select_shared_admin
-on public.simulation_reports
+on sim.simulation_reports
 for select
 to authenticated
 using (
@@ -127,7 +127,7 @@ using (
 
 -- Recreate the atomic facilitator functions so they operate on the selected
 -- simulation's creator owner_id rather than requiring actor = creator.
-create or replace function public.publish_simulation(p_simulation_id uuid)
+create or replace function sim.publish_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -144,13 +144,13 @@ begin
   end if;
 
   select owner_id into v_simulation_owner_id
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
   select token into v_token
-  from public.simulation_share_links
+  from sim.simulation_share_links
   where simulation_id = p_simulation_id
     and owner_id = v_simulation_owner_id
     and status = 'active'
@@ -160,12 +160,12 @@ begin
   limit 1;
 
   if v_token is null then
-    insert into public.simulation_share_links (simulation_id, owner_id)
+    insert into sim.simulation_share_links (simulation_id, owner_id)
     values (p_simulation_id, v_simulation_owner_id)
     returning token into v_token;
   end if;
 
-  update public.simulations
+  update sim.simulations
   set status = 'published', published_at = coalesce(published_at, now()), version = version + 1
   where id = p_simulation_id;
 
@@ -173,7 +173,7 @@ begin
 end;
 $$;
 
-create or replace function public.unpublish_simulation(p_simulation_id uuid)
+create or replace function sim.unpublish_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -189,19 +189,19 @@ begin
   end if;
 
   select owner_id into v_simulation_owner_id
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_simulation_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  update public.simulations
+  update sim.simulations
   set status = 'unpublished', version = version + 1
   where id = p_simulation_id;
 
@@ -209,7 +209,7 @@ begin
 end;
 $$;
 
-create or replace function public.regenerate_simulation_public_token(p_simulation_id uuid)
+create or replace function sim.regenerate_simulation_public_token(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -226,23 +226,23 @@ begin
   end if;
 
   select owner_id into v_simulation_owner_id
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_simulation_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  insert into public.simulation_share_links (simulation_id, owner_id)
+  insert into sim.simulation_share_links (simulation_id, owner_id)
   values (p_simulation_id, v_simulation_owner_id)
   returning token into v_token;
 
-  update public.simulations
+  update sim.simulations
   set status = 'published', published_at = coalesce(published_at, now()), version = version + 1
   where id = p_simulation_id;
 
@@ -250,7 +250,7 @@ begin
 end;
 $$;
 
-create or replace function public.archive_simulation(p_simulation_id uuid)
+create or replace function sim.archive_simulation(p_simulation_id uuid)
 returns jsonb
 language plpgsql
 volatile
@@ -266,19 +266,19 @@ begin
   end if;
 
   select owner_id into v_simulation_owner_id
-  from public.simulations
+  from sim.simulations
   where id = p_simulation_id and deleted_at is null
   for update;
   if not found then raise no_data_found using message = 'Simulation not found.'; end if;
 
-  update public.simulation_share_links
+  update sim.simulation_share_links
   set status = 'revoked', revoked_at = now()
   where simulation_id = p_simulation_id
     and owner_id = v_simulation_owner_id
     and status = 'active'
     and revoked_at is null;
 
-  update public.simulations
+  update sim.simulations
   set status = 'unpublished', deleted_at = now(), version = version + 1
   where id = p_simulation_id;
 
@@ -286,9 +286,9 @@ begin
 end;
 $$;
 
-comment on policy simulations_select_shared_admin on public.simulations is
+comment on policy simulations_select_shared_admin on sim.simulations is
   'All permanent authenticated facilitators share one admin workspace.';
-comment on column public.simulations.owner_id is
+comment on column sim.simulations.owner_id is
   'Immutable creator identity for audit and child-row consistency; not an RLS isolation boundary.';
 
 commit;

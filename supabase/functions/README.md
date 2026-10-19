@@ -21,7 +21,16 @@ Set under Dashboard → **Edge Functions** → **Secrets**:
 | `ELEVENLABS_VOICE_MALE` | Optional. ElevenLabs voice id used when the character's voice is male. |
 | `ELEVENLABS_VOICE_FEMALE` | Optional. ElevenLabs voice id used when the character's voice is female. |
 
-`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically — do not add them. The service-role key is used only to read the full simulation server-side when building the character overrides.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically — do not add them.
+
+## Shared project
+
+The functions run in the shared NGG Supabase project, where the simulation
+tables live in the `sim` schema. Every REST call names it (`Accept-Profile: sim`
+for reads, `Content-Profile: sim` for writes and RPC calls); a call without the
+header is served from `public` and finds nothing. The ElevenLabs post-call
+webhook must point at this project's URL:
+`https://<project-ref>.supabase.co/functions/v1/elevenlabs-postcall`. The service-role key is used only to read the full simulation server-side when building the character overrides.
 
 ## Functions
 

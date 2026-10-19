@@ -4,7 +4,7 @@
 
 begin;
 
-create or replace function public.get_participant_simulation(public_token text)
+create or replace function sim.get_participant_simulation(public_token text)
 returns jsonb
 language sql
 stable
@@ -73,8 +73,8 @@ as $$
       'scenarioSummary', coalesce(simulation.participant_brief ->> 'situationDescription', '')
     )
   )
-  from public.simulation_share_links as share_link
-  join public.simulations as simulation
+  from sim.simulation_share_links as share_link
+  join sim.simulations as simulation
     on simulation.id = share_link.simulation_id
    and simulation.owner_id = share_link.owner_id
   where char_length(public_token) between 32 and 256
